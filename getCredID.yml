@@ -1,0 +1,20 @@
+---
+- name: Retrieve Username and Password
+  hosts: localhost  # Assuming you want to run this locally
+
+  vars:
+    my_credential_id: 15  # Replace with your actual credential ID
+
+  tasks:
+    - name: Retrieve credentials
+      tower_credential:
+        name: "{{ my_credential_id }}"
+      register: credential_result
+
+    - name: Print username
+      debug:
+        var: credential_result.username
+
+    - name: Print password (Note: It's not recommended to print the password in clear text)
+      debug:
+        var: credential_result.password
