@@ -15,6 +15,6 @@
       debug:
         var: credential_result.username
 
-    - name: Print password (Note: It's not recommended to print the password in clear text)
+    - name: Print password 
       debug:
         var: credential_result.password
