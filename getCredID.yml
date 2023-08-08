@@ -7,7 +7,7 @@
 
   tasks:
     - name: Retrieve credentials
-      tower_credential:
+      awx.awx.credential:
         name: "{{ my_credential_id }}"
       register: credential_result
 
