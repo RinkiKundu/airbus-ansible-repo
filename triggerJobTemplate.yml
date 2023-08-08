@@ -6,7 +6,7 @@
   vars:
     #file_path: "{{ file_path }}"
     Template_Id: "95"
-    CI_Name: "43.205.96.215"
+    CI_Name: "52.66.210.246"
     credentialID: "15"
 
   tasks:
