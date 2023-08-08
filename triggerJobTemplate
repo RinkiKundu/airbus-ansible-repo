@@ -1,0 +1,35 @@
+---
+- name: Read incident data from a file and REST-API call a template
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    #file_path: "{{ file_path }}"
+    Template_Id: "95"
+    CI_Name: "43.205.96.215"
+    credentialID: "15"
+
+  tasks:
+    - name: Launch the Job Template
+      vars:
+        pat_token: "6hXjvaq8TzsHdK2U5ppkgfgJs4YUPc"
+      uri:
+        url: "https://35.154.24.128/api/v2/job_templates/{{ Template_Id }}/launch/"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ pat_token }}"
+          Accept: "application/json"
+          Content-Type: "application/json"
+        body_format: json
+        body:
+          credentials: ["{{ credentialID }}"]
+          extra_vars:
+            host: "{{ CI_Name }}"
+        validate_certs: no
+      register: response
+      failed_when: false
+      changed_when: false
+
+    - name: Display API response
+      debug:
+        var: response
