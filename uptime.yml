@@ -1,5 +1,12 @@
-- name: Vitals
-  hosts: all
+--- 
+- name: playbook to get hostname
+  hosts: "{{ host }}"
+  gather_facts: yes
+
   tasks:
-    - name: Get uptime of localhost
-      shell: uptime -p
+    - name: "Show hostname"
+      command: hostname
+      register: details
+    - name: 'Get Interfaces details'
+      debug:
+        msg: "{{ details.stdout }}"
