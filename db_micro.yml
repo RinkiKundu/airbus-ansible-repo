@@ -1,0 +1,12 @@
+- name: Execute MySQL Query
+  community.mysql.mysql_query:
+    login_host: "db.vishal-chauhan.in"
+    login_user: "linroot"
+    login_password: "&rU1HRBh4W9UHkDb"
+    login_db: Ansible
+    query: SELECT * FROM Ansible.cmdb_ci;
+  register: query_result
+
+- name: Debug Query Result
+  debug:
+    var: query_result

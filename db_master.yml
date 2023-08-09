@@ -1,0 +1,32 @@
+---
+- name: Import readCSVfile1
+  hosts: localhost
+  gather_facts: no
+
+  tasks:
+    - name: Include readCSVfile1 and Execute
+      include: db_micro.yml
+      register: query_result.query_result
+
+    - name: Display Result from Playbook 1
+      debug:
+        var: query_result.query_result
+    
+    - name: Check the type of JSON Data
+      debug:
+        msg: "the data type of query_result is {{ query_result | type_debug }}"
+
+    - name: Initialize 'os_values' List
+      set_fact:
+        os_values: []
+
+    - name: Loop through query result and collect 'os' values
+      loop: "{{ query_result.query_result[0] }}"
+      loop_control:
+        loop_var: result
+      set_fact:
+        os_values: "{{ os_values + [result.os] }}"    
+
+    - name: Display 'os' Values
+      debug:
+        var: os_values
