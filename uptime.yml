@@ -1,7 +1,7 @@
 --- 
 - name: playbook to get hostname
   hosts: "{{ host }}"
-  gather_facts: yes
+  gather_facts: no
 
   tasks:
     - block:
