@@ -5,7 +5,7 @@
 
   tasks:
     - block:
-        - name: "Show hostname"
+        - name: "Show hostname server"
           command: hostname
           register: details
         - name: 'Get Interfaces details'
