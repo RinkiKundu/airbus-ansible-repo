@@ -4,9 +4,16 @@
   gather_facts: yes
 
   tasks:
-    - name: "Show hostname"
-      command: hostname
-      register: details
-    - name: 'Get Interfaces details'
-      debug:
-        msg: "OUTPUT: {{ details.stdout }}"
+    - block:
+        - name: "Show hostname"
+          command: hostname
+          register: details
+        - name: 'Get Interfaces details'
+          debug:
+            msg: "OUTPUT: {{ details.stdout }}"
+            
+      rescue: 
+        - name: Log Output For Failure
+          debug:
+            msg: "OUTPUT : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+          failed_when: True
