@@ -1,7 +1,7 @@
----
+--- 
 - name: playbook to get hostname
   hosts: "{{ host }}"
-  gather_facts: no
+  gather_facts: yes
 
   tasks:
     - block:
@@ -11,12 +11,9 @@
         - name: 'Get Interfaces details'
           debug:
             msg: "OUTPUT: {{ details.stdout }}"
-      
+            
       rescue: 
         - name: Log Output For Failure
           debug:
             msg: "OUTPUT : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
-        - name: Handle Unreachable Error
-          debug:
-            msg: "Host is unreachable: {{ ansible_host }}"
-          when: "unreachable" in ansible_failed_result | default({})
+          failed_when: True
