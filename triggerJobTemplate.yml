@@ -5,8 +5,8 @@
 
   vars:
     #file_path: "{{ file_path }}"
-    Template_Id: "95"
-    CI_Name: {{ Template_Id }}
+    Template_Id: {{ Template_Id }}
+    CI_Name: {{ CI_Name }}
     credentialID: {{ credentialID }}
 
   tasks:
