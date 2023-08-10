@@ -5,9 +5,9 @@
 
   vars:
     #file_path: "{{ file_path }}"
-    Template_Id: {{ Template_Id }}
-    CI_Name: {{ CI_Name }}
-    credentialID: {{ credentialID }}
+    Template_Id: "{{ Template_Id }}"
+    CI_Name: "{{ CI_Name }}"
+    credentialID: "{{ credentialID }}"
 
   tasks:
     - name: Launch the Job Template
