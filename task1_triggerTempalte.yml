@@ -67,8 +67,8 @@
           register: job_result
           until: "'canceled' in job_result['json']['status'] or 'successful' in job_result['json']['status'] or 'failed' in job_result['json']['status']"
           #until: job_result.content is defined
-          retries: 10
-          delay: 30
+          retries: 3
+          delay: 10
           no_log: false
           ignore_errors: true
 
