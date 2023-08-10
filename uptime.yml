@@ -9,4 +9,4 @@
       register: details
     - name: 'Get Interfaces details'
       debug:
-        msg: "{{ details.stdout }}"
+        msg: "OUTPUT: {{ details.stdout }}"
