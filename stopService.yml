@@ -16,10 +16,15 @@
           service:
             name: "{{ service_name }}"
             state: started
+        - name: Display Error Message
+          debug:
+            msg: "OUTPUT: Service started"
+
         - name: Check Service Status
           service_facts:
             filters:
               name: "{{ service_name }}"
+
         - name: Display Service Status
           debug:
             var: ansible_facts.services[service_name].state
@@ -27,5 +32,5 @@
         - name: Display Error Message
           debug:
             #msg: "Failed to restart the service: {{ stop_result.msg }}"
-            msg: "OUTPUT : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+            msg: "OUTPUT: FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
 
