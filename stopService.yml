@@ -1,0 +1,31 @@
+- name: Restart Service
+  hosts: "localhost"
+  become: no  # Enable privilege escalation (sudo)
+  vars:
+    service_name: "apache2"  # Change this to your service name
+
+  tasks:
+    - block:
+        - name: Stop the Service
+          service:
+            name: "{{ service_name }}"
+            state: stopped
+          register: stop_result
+
+        - name: Start the Service
+          service:
+            name: "{{ service_name }}"
+            state: started
+        - name: Check Service Status
+          service_facts:
+            filters:
+              name: "{{ service_name }}"
+        - name: Display Service Status
+          debug:
+            var: ansible_facts.services[service_name].state
+      rescue:
+        - name: Display Error Message
+          debug:
+            #msg: "Failed to restart the service: {{ stop_result.msg }}"
+            msg: "OUTPUT : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+
