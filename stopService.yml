@@ -1,5 +1,5 @@
 - name: Restart Service
-  hosts: "localhost"
+  hosts: "{{ host }}"
   become: no  # Enable privilege escalation (sudo)
   vars:
     service_name: "apache2"  # Change this to your service name
