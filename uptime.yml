@@ -8,6 +8,7 @@
         - name: "Show hostname server"
           command: hostname
           register: details
+          failed_when: true
         - name: 'Get Interfaces details'
           debug:
             msg: "OUTPUT: {{ details.stdout }}"
