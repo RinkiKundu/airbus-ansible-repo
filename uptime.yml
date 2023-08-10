@@ -17,4 +17,9 @@
         - name: Log Output For Failure
           debug:
             msg: "OUTPUT : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result.msg }}"
-          failed_when: True
+          failed_when: True 
+        - name: Handle Unreachable Error
+          debug:
+            msg: "Host is unreachable: {{ ansible_host }}"
+          when: "unreachable" in ansible_failed_result | default({})
+
