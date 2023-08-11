@@ -16,18 +16,18 @@
           service:
             name: "{{ service_name }}"
             state: started
-        - name: Display Error Message
-          debug:
-            msg: "OUTPUT: SUCCESS: Service started"
 
         - name: Check Service Status
-          service_facts:
-            filters:
-              name: "{{ service_name }}"
+          systemd:
+            name: "{{ service_name }}"
 
         - name: Display Service Status
           debug:
             var: ansible_facts.services[service_name].state
+
+        - name: Display Success Message
+          debug:
+            msg: "OUTPUT: SUCCESS: Service started"
       rescue:
         - name: Display Error Message
           debug:
