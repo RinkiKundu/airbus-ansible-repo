@@ -20,10 +20,11 @@
         - name: Check Service Status
           systemd:
             name: "{{ service_name }}"
+          register: apache_status
 
         - name: Display Service Status
           debug:
-            var: ansible_facts.services[service_name].state
+            var:  apache_status
 
         - name: Display Success Message
           debug:
