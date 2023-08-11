@@ -1,0 +1,44 @@
+---
+- name: Get Job Status from Ansible Tower
+  hosts: localhost
+  gather_facts: no
+
+  vars:
+    tower_api_url: "https://35.154.24.128"  # Update with your Ansible Tower URL
+    job_id: "2135"  # Update with the desired job ID
+    tower_token: "6hXjvaq8TzsHdK2U5ppkgfgJs4YUPc"
+
+  tasks:
+    - name: Make API call to get job status
+      uri:
+        url: "{{ tower_api_url }}/api/v2/jobs/{{ job_id }}/stdout/?format=txt"
+        validate_certs: no
+        return_content: yes
+        status_code: 201, 200
+        headers:
+          Content-Type: application/json
+          Authorization: "Bearer {{ tower_token }}"
+      register: api_response
+
+    - name: Debug API response
+      debug:
+        var: api_response.content
+    - name: Extract status using grep
+      set_fact:
+        #extracted_output: "{{ api_response.content | regex_search('OUTPUT: (.+)') | default('') }}"
+        extracted_output: "{{ api_response.content | regex_search('OUTPUT: (.+?)\"') | default('') | regex_replace('\"$', '')', '') }}"
+        #extracted_output: "{{ api_response.content  | regex_findall('OUTPUT: ([^\"]+)') | first | default('') }}"
+      #when: api_response.content is defined
+
+    - name: Display modified_output
+      debug:
+        var: extracted_output
+
+
+    - name: Display job status
+      set_fact:
+        modified_output: "{{ extracted_output | regex_replace('\"$', '') }}"
+
+    - name: Display modified_output
+      debug:
+        var: modified_output

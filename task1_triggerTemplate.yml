@@ -1,0 +1,130 @@
+- name: Validate template id and trigger a playbook basedon UC
+  gather_facts: no
+  hosts: localhost
+  vars:
+     usecaseName: "service-alert"
+     credential_ID: "15"
+     CI_Name: "65.2.9.61"
+     pat_token: "6hXjvaq8TzsHdK2U5ppkgfgJs4YUPc"
+     csv_path: "sample.csv"
+
+    #usecaseName: "{{ usecaseName }}"
+    #credential_ID: "{{ credential_ID }}"
+    #CI_Name: "{{ CI_Name }}"
+    #pat_token: "6hXjvaq8TzsHdK2U5ppkgfgJs4YUPc"
+     tower_api_url: "https://35.154.24.128"
+    #csv_path: "{{ csv_path }}"
+
+  tasks:
+    - block:
+        - name: Read the CSV file
+          community.general.read_csv:
+            path: "{{ csv_path }}"
+          register: usecase
+
+        - name: Vaildate the UC name
+          set_fact:
+            matched_item: "{{ item }}"
+          when: uc_to_check == item.UsecaseName
+          with_items: "{{ usecase.list }}"
+          vars:
+            uc_to_check: "{{ usecaseName }}"
+
+        - name: Store the template id for the matched UC in a variable
+          set_fact:
+            Template_Id: "{{ matched_item.TemplateID | trim }}"
+          when: matched_item is defined
+
+        - name: Print the template id for the matched UC
+          debug:
+            msg: "uc: {{ matched_item.UsecaseName }}, tempid: {{ Template_Id }}"
+          when: matched_item is defined
+
+        - name: Log message when usecase is not matched
+          debug:
+            msg: "'{{ usecaseName }}' Not Found"
+          when: matched_item is not defined
+        - name: Launch the Job Template
+          uri:
+            url: "{{ tower_api_url }}/api/v2/job_templates/{{ Template_Id }}/launch/"
+            method: POST
+            headers:
+              Authorization: "Bearer {{ pat_token }}"
+              Accept: "application/json"
+              Content-Type: "application/json"
+            body_format: json
+            body:
+              credentials: ["{{ credential_ID }}"]
+              extra_vars:
+                host: "{{ CI_Name }}"
+            validate_certs: no
+          register: response
+          failed_when: false
+          changed_when: false
+
+        - name: Display API response
+          debug:
+            var: response
+
+        - name: Handle success and failure conditions
+          set_fact:
+            job_id: "{{ response.json.id }}"
+            job_status: "{{ response.json.status }}"
+            api_response_status: "{{ response.status }}"
+          when: response.status in [200, 201]
+
+        - name: Display extracted values
+          debug:
+            msg: "API Response Status: {{ api_response_status }}, Job ID: {{ job_id }}, Job Status: {{ job_status }}"
+          when: job_id is defined and job_status is defined
+        - name: Check that tower job has finished
+          uri:
+            url: "{{ tower_api_url }}/api/v2/jobs/{{ job_id }}/"
+            #url: "{{ tower_api_url }}/api/v2/jobs/{{ job_id }}/stdout/?format=txt"
+            method: GET
+            validate_certs: no
+            return_content: yes
+            status_code: 201, 200
+            headers:
+              Content-Type: application/json
+              Authorization: "Bearer {{ pat_token }}"
+          register: job_result
+          until: "'canceled' in job_result['json']['status'] or 'successful' in job_result['json']['status'] or 'failed' in job_result['json']['status']"
+          #until: job_result.content is defined
+          retries: 10
+          delay: 30
+          no_log: false
+          ignore_errors: true
+
+        - name: print job_result
+          debug:
+            msg: "{{ job_result['content'] }}"
+
+        - name: Make API call to get job status
+          uri:
+            url: "{{ tower_api_url }}/api/v2/jobs/{{ job_id }}/stdout/?format=txt"
+            validate_certs: no
+            return_content: yes
+            status_code: 201, 200
+            headers:
+              Content-Type: application/json
+              Authorization: "Bearer {{ pat_token }}"
+          register: api_response
+
+        - name: Debug API response
+          debug:
+            var: api_response.content
+        - name: Extract output msg
+          set_fact:
+            extracted_output: "{{ api_response.content | regex_search('OUTPUT: (.+?)\"') | default('') | regex_replace('\"$', '') }}"
+
+
+        - name: Display modified_output
+          debug:
+            var: extracted_output
+
+      rescue:
+        - name: Log Output For Failure
+          debug:
+            msg: "OUTPUT : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+          failed_when: True

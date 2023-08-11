@@ -1,0 +1,64 @@
+- name: Query to MySql DB
+  hosts: localhost
+  vars:
+    db_host: "194.195.112.205"
+    db_user: "root"
+    db_password: "IRONMAN"
+    query_task: "select"
+    db_query:  "select * from cat.`cat-table`"
+
+  tasks:
+    - name: Execute Database Query
+      block:
+        - name: Execute SELECT query
+          when: query_task == "select"
+          community.mysql.mysql_query:
+            login_user: "{{ db_user }}"
+            login_password: "{{ db_password }}"
+            login_host: "{{ db_host }}"
+            login_port: "30517"
+            query: "{{ db_query }}"
+          register: query_result
+
+        - name: Display SELECT query result
+          when: query_task == "select"
+          debug:
+            var: query_result
+        - name: Execute UPDATE query
+          when: query_task == "update"
+          community.mysql.mysql_query:
+            login_user: "{{ db_user }}"
+            login_password: "{{ db_password }}"
+            login_host: "{{ db_host }}"
+            #login_db: "{{ db_name }}"
+            query: "{{ db_query }}"
+          register: query_result
+
+        - name: Display SELECT query result
+          when: query_task == "update"
+          debug:
+            var: query_result
+        - name: Execute INSERT query
+          when: query_task == "insert"
+          community.mysql.mysql_query:
+            login_user: "{{ db_user }}"
+            login_password: "{{ db_password }}"
+            login_host: "{{ db_host }}"
+            #login_db: "{{ db_name }}"
+            query: "{{ db_query }}"
+          register: query_result
+
+        - name: Display SELECT query result
+          when: query_task == "insert"
+          debug:
+            var: query_result
+
+        - name: Unsupported query task
+          when: query_task not in ["insert", "select", "update"]
+          debug:
+            msg: "Unsupported query task: {{ query_task }}"
+      rescue:
+        - name: Error executing query
+          debug:
+            msg: "OUTPUT: FAILED: Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+
