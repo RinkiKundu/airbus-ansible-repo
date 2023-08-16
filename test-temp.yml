@@ -5,7 +5,7 @@
 
   tasks:
     - name: install pyone
-      apt:
+      yum:
         name: pyone
         state: present
         
