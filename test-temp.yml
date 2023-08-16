@@ -6,7 +6,7 @@
   tasks:
     - name: Fetch the TEMPLATE by id
       community.general.one_template:
-        id: 102
+        id: 2474
       register: result
 
     - name: Print the TEMPLATE properties
