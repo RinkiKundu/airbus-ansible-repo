@@ -1,20 +1,22 @@
 ---
-- name: Call Template in Ansible Automation Platform
+- name: Launch Ansible Job
+
   hosts: localhost
-  gather_facts: false
+
+  gather_facts: no
 
   tasks:
-    - name: install pyone
-      yum:
-        name: pyone
-        state: present
-        
-    - name: Fetch the TEMPLATE by id
-      community.general.one_template:
-        template: 132
-        name: rayank-readCSV
-      register: result
 
-    - name: Print the TEMPLATE properties
-      ansible.builtin.debug:
-        var: result
+    - name: Launch AAP Job Template
+
+      awx.job_template:
+
+        tower_host: 35.154.24.128
+
+        username: rinki
+
+        password: rinki
+
+        validate_certs: False  # Set to True if you want to validate SSL certificates
+
+        job_template: 132
