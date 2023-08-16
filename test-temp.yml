@@ -4,6 +4,11 @@
   gather_facts: false
 
   tasks:
+    - name: install pyone
+      apt:
+        name: pyone
+        state: present
+        
     - name: Fetch the TEMPLATE by id
       community.general.one_template:
         template: 132
