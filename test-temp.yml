@@ -6,7 +6,8 @@
   tasks:
     - name: Fetch the TEMPLATE by id
       community.general.one_template:
-        template: 2474
+        template: 132
+        name: rayank-readCSV
       register: result
 
     - name: Print the TEMPLATE properties
