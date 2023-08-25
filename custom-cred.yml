@@ -1,0 +1,15 @@
+---
+- name: Main Playbook
+  hosts: localhost
+  gather_facts: false
+ 
+  tasks:
+    - name: print username
+      set_fact:
+        url: "{{ test_url }}"
+        password: "{{ test_pass }}"
+        user: "{{ test_user }}"
+  
+    - name: print the values
+      debug:
+        msg: " username: {{ url }} password: {{ password }} url: {{ url }}"
