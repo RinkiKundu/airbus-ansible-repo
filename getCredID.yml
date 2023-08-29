@@ -34,7 +34,7 @@
 
   tasks:
     - name: Retrieve credentials from AWX
-      community.general.awx.credential:
+      awx.awx.credential:
         url: "{{ AWX_API_URL }}"
         username: "{{ AWX_USERNAME }}"
         password: "{{ AWX_PASSWORD }}"
