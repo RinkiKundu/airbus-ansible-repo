@@ -1,20 +1,51 @@
+# ---
+# - name: Retrieve Username and Password
+#   hosts: localhost  # Assuming you want to run this locally
+
+#   vars:
+#     my_credential_id: 15  # Replace with your actual credential ID
+
+#   tasks:
+#     - name: Retrieve credentials
+#       awx.awx.credential:
+#         name: "{{ my_credential_id }}"
+#       register: credential_result
+
+#     - name: Print username
+#       debug:
+#         var: credential_result.username
+
+#     - name: Print password 
+#       debug:
+#         var: credential_result.password
+
+
+
 ---
-- name: Retrieve Username and Password
-  hosts: localhost  # Assuming you want to run this locally
+- name: Retrieve Username and Password from AWX
+  hosts: localhost
+  gather_facts: no
 
   vars:
-    my_credential_id: 15  # Replace with your actual credential ID
+    AWX_API_URL: "https://35.154.24.128/api/v2/"  # Replace with your AWX API URL
+    AWX_USERNAME: "rinki"  # Replace with your AWX username
+    AWX_PASSWORD: "rinki"  # Replace with your AWX password or token
+    MY_CREDENTIAL_ID: 15  # Replace with your actual credential ID
 
   tasks:
-    - name: Retrieve credentials
-      awx.awx.credential:
-        name: "{{ my_credential_id }}"
+    - name: Retrieve credentials from AWX
+      community.general.awx.credential:
+        url: "{{ AWX_API_URL }}"
+        username: "{{ AWX_USERNAME }}"
+        password: "{{ AWX_PASSWORD }}"
+        id: "{{ MY_CREDENTIAL_ID }}"
       register: credential_result
 
     - name: Print username
       debug:
         var: credential_result.username
 
-    - name: Print password 
+    - name: Print password
       debug:
         var: credential_result.password
+
