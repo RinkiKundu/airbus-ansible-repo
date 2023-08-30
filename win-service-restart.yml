@@ -25,8 +25,8 @@
 
      - name: DESCRIPTION
        set_fact:
-         DESCRIPTION: "[hi][hello][server1][Spooler] [Service Status] [server2][serveice restart]"
-         #DESCRIPTION: "{{ DESCRIPTION }}"
+         #DESCRIPTION: "[hi][hello][server1][Spooler] [Service Status] [server2][serveice restart]"
+         DESCRIPTION: "{{ DESCRIPTION }}"
          #state: restarted
          
      - name: print description
