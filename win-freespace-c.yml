@@ -1,1 +1,163 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+   
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "OUTPUT: FAILED :  This target host {{ HOSTS }} does not exist in Tower Ansible Inventory"
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+        
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg:
+            - "DISPLAY: Invalid input found"
+
+        failed_when: True
+
+- name: Playbook  freespace disk C
+  gather_facts: true
+  hosts: "{{ HOSTS }}"
+    
+  vars:
+   HOSTS:
+   DESCRIPTION:
+
+  tasks:
+   - block:
+
+     - name: DESCRIPTION
+       set_fact:
+         #DESCRIPTION: "[hi][hello][server1][Spooler] [Service Status] [server2][serveice restart]"
+         DESCRIPTION: "{{ DESCRIPTION }}"
+         #state: restarted
+         
+     - name: print description
+       debug:
+        msg: "{{ DESCRIPTION }}"
+
+     - name: Extract Value Matches
+       set_fact:
+        PERCENT: "{{ DESCRIPTION | regex_findall('(\\d+(?:%|MB))') | map('regex_replace', '%', '') }}"
+
+     - name: Assert that PERCENT is provided
+       assert:
+         that:
+           - PERCENT is defined
+           - PERCENT >= 0
+           - PERCENT < 100
+         msg: "OUTPUT: FAILED on {{ HOSTS }} Incorrect input PERCENT."
+         
+     - name: removing directory C:\Windows\Temp\*
+       win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path c:\windows\temp\* -recurse -force
+       changed_when: false
+       ignore_errors: yes
+
+     - name: removing directory C:\Windows\ServiceProfiles\LocalService\AppData\Local\Temp\*
+       win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path C:\Windows\ServiceProfiles\LocalService\AppData\Local\Temp\* -recurse -force
+       changed_when: false
+       ignore_errors: yes
+
+     - name: removing directory C:\Windows\assembly\NativeImages*\Temp\*
+       win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path C:\Windows\assembly\NativeImages*\Temp\* -recurse -force
+       changed_when: false
+       ignore_errors: yes
+
+     - name: removing directory C:\Windows\assembly\temp\*
+       win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path C:\Windows\assembly\temp\* -recurse -force
+       changed_when: false
+       ignore_errors: yes
+
+#     - name: removing directory users windows Temp
+#       win_shell: |
+#         $users = Get-ChildItem C:\Users
+#         foreach ($user in $users){
+#           $folder = "C:\Users\$user\AppData\Local\Temp"
+#           If (Test-Path $folder) {
+#             Remove-Item $folder -Recurse -Force -ErrorAction silentlycontinue
+#             mkdir $folder
+#           }
+#         }
+#       changed_when: false
+#       ignore_errors: yes
+       
+     - name: removing directory users Temporary Internet Files
+       win_shell: |
+         $users = Get-ChildItem C:\Users
+         foreach ($user in $users){
+           $folder1 = "C:\Users\$user\AppData\Local\Microsoft\Windows\Temporary Internet Files"
+           $folder2 = "C:\Users\$user\AppData\Local\Microsoft\Windows\INetCache"
+           $folder3 = "C:\Users\$user\AppData\Local\Temporary Internet Files"
+           If (Test-Path $folder1) {
+             Remove-Item $folder1 -Recurse -Force -ErrorAction silentlycontinue
+           }
+           If (Test-Path $folder2) {
+             Remove-Item $folder2 -Recurse -Force -ErrorAction silentlycontinue
+           }
+           If (Test-Path $folder3) {
+             Remove-Item $folder3 -Recurse -Force -ErrorAction silentlycontinue
+           }
+         }
+       changed_when: false
+       ignore_errors: yes
+
+     - name: C Drive Status
+       win_shell: |
+        $paramdisplay={{ PERCENT }}
+        $param=([int]($paramdisplay*100+1))/100
+        
+        $freespace=Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" | Foreach-Object {$_.FreeSpace}
+         $size=Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='C:'" | Foreach-Object {$_.Size}
+         $percent=$freespace/$size*100
+         
+         $percent=([int]($percent*100))/100
+         
+         if ($percent -gt $param ) {
+           write-output "Freespace left after cleaning: $percent%: OK (> $paramdisplay%)"
+         }
+         else
+         {
+           write-output "Freespace left after cleaning: $percent%: Insufficient (< $paramdisplay%)"
+         }
+
+       register: out
+       changed_when: false
+       failed_when: out.stdout | trim is search('Insufficient')
+       
+     - name: Log output for  when successful
+       debug:
+         msg:
+           - "OUTPUT: SUCCESSFUL on {{ HOSTS }}"
+           - "DISPLAY: {{ out.stdout_lines | to_yaml }}"
+ 
+     rescue:
+     - name: "Copy ./files/du-c.ps1 to {{ HOSTS }}"
+       win_copy:
+         src: ./files/du-c.ps1
+         dest: C:/Temp/du-c.ps1
+       register: result_copy
+       ignore_errors: yes
+          
+     - name: run script
+       win_shell: C:\temp\du-c.ps1
+       register: out2
+       ignore_errors: yes
+
+     - name: Purging the script
+       win_file:
+         path: C:\temp\du-c.ps1
+         state: absent
+       ignore_errors: yes
+       
+     - name: Log output for when failed
+       debug:
+         msg:
+          - "OUTPUT: FAILED : Task {{ ansible_failed_task.name}} failed on {{ HOSTS }}"
+          - "DISPLAY : {{ out.stdout_lines | default ('not valued')  | to_yaml }} {{ out2.stdout_lines | default ('not valued') | to_nice_yaml }}"
+       failed_when: True
 
