@@ -14,6 +14,7 @@
      Template_Id: "{{ Template_Id }}"
      credential_ID: "{{ credential_ID }}"
      CI_Name: "{{ CI_Name }}"
+     DESCRIPTION: "{{ DESCRIPTION }}"
      pat_token: "6hXjvaq8TzsHdK2U5ppkgfgJs4YUPc"
      tower_api_url: "https://35.154.24.128"
      #csv_path: "{{ csv_path }}"
@@ -32,7 +33,8 @@
             body:
               credentials: ["{{ credential_ID }}"]
               extra_vars:
-                host: "{{ CI_Name }}"
+                HOSTS: "{{ CI_Name }}"
+                DESCRIPTION: "{{ DESCRIPTION }}"
             validate_certs: no
           register: response
           failed_when: false
