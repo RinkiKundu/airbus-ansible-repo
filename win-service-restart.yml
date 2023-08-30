@@ -35,8 +35,12 @@
 
      - name: Use regex to find the service name
        set_fact:
-        service_name: "{{ DESCRIPTION | regex_search('\\[[^\\]]+\\]\\s*\\[Service Status\\]') | regex_replace('\\s*\\[Service Status\\]$', '') | regex_replace('\\[|\\]', '') }}"
-       when: DESCRIPTION is search('\\[[^\\]]+\\]\\s*\\[Service Status\\]')       
+        SERVICE: "{{ DESCRIPTION | regex_search('\\[[^\\]]+\\]\\s*\\[Service Status\\]') | regex_replace('\\s*\\[Service Status\\]$', '') | regex_replace('\\[|\\]', '') }}"
+       when: DESCRIPTION is search('\\[[^\\]]+\\]\\s*\\[Service Status\\]') 
+
+     - name: print description
+       debug:
+        msg: "{{ SERVICE }}"      
        
      - name: Log output for SYNTBOT service status before restart
        win_shell:
