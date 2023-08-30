@@ -23,10 +23,19 @@
   tasks:
    - block:
 
+     - name: DESCRIPTION
+       set_fact:
+         DESCRIPTION: "{{ DESCRIPTION }}"
+         #state: restarted
+         
+     - name: print description
+       debug:
+        msg: "{{ DESCRIPTION }}"
+
      - name: Use regex to find the service name
        set_fact:
-        SERVICE: "{{ DESCRIPTION | regex_search('\\[[^\\]]+\\]\\s*\\[Service Status\\]') | regex_replace('\\s*\\[Service Status\\]$', '') | regex_replace('\\[|\\]', '') }}"
-      when: DESCRIPTION is search('\\[[^\\]]+\\]\\s*\\[Service Status\\]')       
+        service_name: "{{ DESCRIPTION | regex_search('\\[[^\\]]+\\]\\s*\\[Service Status\\]') | regex_replace('\\s*\\[Service Status\\]$', '') | regex_replace('\\[|\\]', '') }}"
+      when: input_string is search('\\[[^\\]]+\\]\\s*\\[Service Status\\]')       
        
      - name: Log output for SYNTBOT service status before restart
        win_shell:
