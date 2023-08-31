@@ -50,6 +50,10 @@
      - name: print PERCENT
        debug:
         msg: "{{ PERCENT }}"
+        
+     - name: Check the type of JSON Data
+       debug:
+        msg: "the data type of PERCENT is {{ PERCENT | type_debug }}"
 
      - name: Assert that PERCENT is provided
        assert:
