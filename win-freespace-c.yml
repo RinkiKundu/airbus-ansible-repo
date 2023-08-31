@@ -44,16 +44,16 @@
      - name: Extract Value Matches
        set_fact:
         #PERCENT: "{{ DESCRIPTION | regex_findall('(\\d+(?:%|MB))') | map('regex_replace', '%', '') }}"
-         PERCENT1: "{{ DESCRIPTION | regex_search('(\\d+(?:%|MB))') | regex_replace('%', '') | int(0) }}"
+         PERCENT: "{{ DESCRIPTION | regex_search('(\\d+(?:%|MB))') | regex_replace('%', '') }}"
        when: DESCRIPTION is search('(\\d+(?:%|MB))')
 
      - name: print PERCENT
        debug:
-        msg: "{{ PERCENT1 }}"
+        msg: "{{ PERCENT }}"
 
      - name: Convert the string to an integer
        set_fact:
-         PERCENT: "{{ PERCENT1 | int }}"
+         PERCENT: "{{ PERCENT | int }}"
         
      - name: Check the data type of PERCENT
        debug:
