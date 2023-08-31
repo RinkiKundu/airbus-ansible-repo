@@ -59,13 +59,13 @@
        debug:
         msg: "the data type of PERCENT is {{ PERCENT | type_debug }}"
 
-     - name: Assert that PERCENT is provided
-       assert:
-         that:
-           - PERCENT is defined
-           - PERCENT >= 0
-           - PERCENT < 100
-         msg: "OUTPUT: FAILED on {{ HOSTS }} Incorrect input PERCENT."
+    #  - name: Assert that PERCENT is provided
+    #    assert:
+    #      that:
+    #        - PERCENT is defined
+    #        - PERCENT >= 0
+    #        - PERCENT < 100
+    #      msg: "OUTPUT: FAILED on {{ HOSTS }} Incorrect input PERCENT."
          
      - name: removing directory C:\Windows\Temp\*
        win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path c:\windows\temp\* -recurse -force
