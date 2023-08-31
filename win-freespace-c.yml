@@ -54,10 +54,6 @@
      - name: Convert the string to an integer
        set_fact:
          PERCENT: "{{ PERCENT | int }}"
-        
-     - name: Check the data type of PERCENT
-       debug:
-        msg: "the data type of PERCENT is {{ PERCENT | type_debug }}"
 
      - name: Assert that PERCENT is provided
        assert:
