@@ -1,0 +1,189 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  This target host {{HOSTS}} does not exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+#-----------------------------------------------------------------------------------------
+# ControlM Update Parameter
+- name: Use case ControlM Update Parameter
+  hosts: "{{ HOSTS }}"
+  gather_facts: false
+  vars:
+    NODEGROUP:
+    ACTION:
+    SERVER:
+    CTRLM_USER:
+    HOSTS: 
+
+  tasks:
+    - block:
+
+      - name: Check if variables NODEGROUP / ACTION / SERVER are provided
+        assert:
+          that:
+            - NODEGROUP | mandatory
+            - NODEGROUP is defined
+            - NODEGROUP is string
+            - SERVER | mandatory
+            - SERVER is defined
+            - ACTION | mandatory
+            - ACTION is defined
+            - ACTION == "ADD" or ACTION == "DELETE" 
+            - CTRLM_USER | mandatory
+            - CTRLM_USER is defined
+            - CTRLM_USER == "ctrlmval" or CTRLM_USER == "ctrlmpro"  or CTRLM_USER == "ctrlmint" or CTRLM_USER == "ctrlmdev"
+          msg: "Please provide variable NODEGROUP or ACTION (must be ADD or DELETE) or SERVER (Important : do not provide CTRLM_USER or HOSTS because they are fixed parameters)"
+
+
+      - name: Copy scripts to target host {{ HOSTS }}
+        copy:
+          src: "{{ item.src }}"
+          dest: "{{ item.dest }}"
+          mode: 0775
+          force: yes
+        with_items:
+          - { src: 'files/controlm-nodegroup-exist.sh',dest: '/tmp/controlm-nodegroup-exist.sh'}
+          - { src: 'files/controlm_liste_nodegroup.ksh',dest: '/tmp/controlm_liste_nodegroup.ksh'}
+          - { src: 'files/Update_node_in_nodegrp',dest: '/tmp/Update_node_in_nodegrp'}
+
+      - name: "Step 1 - Check if NODEGROUP:{{NODEGROUP}} exist ?"
+        become_user: "{{CTRLM_USER}}"
+        become: yes
+        shell: |
+            source ~/.cshrc
+            /tmp/controlm-nodegroup-exist.sh {{NODEGROUP}}
+        register: nodegroup
+        args:
+          executable: /bin/csh
+
+      - name: "Step 2 - List agent for {{NODEGROUP}} on {{nodegroup.stdout}}"
+        include_tasks: tasks/controlm-nodegroup-list.yml
+        with_items: "{{nodegroup.stdout}}"
+        register: list_nodegroup
+
+      - name: List of files to compare
+        shell: |
+            ls -l /tmp/{{NODEGROUP}}*
+        delegate_to: localhost
+        run_once: true
+
+      - name: "Compare {{NODEGROUP}} for all controlM servers found"
+        shell: |
+          DEBUT=0
+          N_LINE=`ls -l /tmp/{{NODEGROUP}}* |wc -l`
+          if [ $N_LINE -gt 1 ]; then
+            for file in `ls /tmp/{{NODEGROUP}}*`
+            do
+              if [ $DEBUT = 0 ]; then
+                REFERENCE=$file
+                DEBUT=1
+              else
+                diff $REFERENCE $file >/dev/null 2>&1
+                if [ $? != 0 ]; then
+                  for i in `ls /tmp/{{NODEGROUP}}*`
+                  do
+                     echo $i |sed 's/.*_\(.*\)/\1/'
+                  done 
+                  exit 1
+                fi
+              fi
+             done
+             ls -l /tmp/{{NODEGROUP}}*
+             echo "`cat /tmp/{{NODEGROUP}}*`; compare is OK"
+             /bin/rm -f /tmp/{{NODEGROUP}}*
+           fi
+           /bin/rm -f /tmp/{{NODEGROUP}}*
+           exit 0
+        delegate_to: localhost
+        register: compare
+        run_once: true
+        args:
+          executable: /bin/bash
+
+      - name: Step 3 - Check if Agent {{SERVER}} exist on {{nodegroup.stdout}}
+        include_tasks: tasks/controlm-check-agent.yml
+        with_items: "{{nodegroup.stdout}}"
+        register: agent
+
+      - name: Step 4 - (ADD or DELETE) {{ACTION}} {{SERVER}} {{nodegroup.stdout}} on {{nodegroup.stdout}}
+        include_tasks: tasks/controlm-add-delete-agent.yml
+        with_items: "{{nodegroup.stdout}}"
+        register: action
+
+      - name: Log output for SYNTBOT OK main program
+        debug:
+          msg: 
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: Action -> Update_node_in_nodegrp  {{NODEGROUP}} {{SERVER}} {{ACTION}} on {{ansible_host}}"
+
+      rescue:
+
+      - name: Log output when failed main program parameter error
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed  {{ ansible_failed_result.msg }} on {{ansible_host}}"
+        run_once: true
+        failed_when: true
+        when: >
+          (list_nodegroup is not defined)  and 
+          (compare is not defined ) and 
+          (agent is not defined ) and
+          (action is not defined )
+
+      - name: Log output when failed main program  List nodegroup 
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: List Nodegroup {{NODEGROUP}} does not exist on {{ ansible_host }}"
+        failed_when: true
+        when: list_nodegroup is defined  and compare is not defined
+
+      - name: Log output when failed main program compare 
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Compare {{NODEGROUP}} error: nodegroup contain is different between {{compare.stdout}}"
+        failed_when: true
+        when: compare is defined and compare.rc == 1
+        run_once: true
+
+      - name: Log output when failed main program AGent failed
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Check Agent {{SERVER}} does not exist on {{ ansible_host }}"
+        failed_when: true
+        when: agent is defined 
+
+      - name: Log output when failed main program ADD or DELETE failed
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Check Agent {{SERVER}} does not exist on {{ ansible_host }}"
+        failed_when: true
+        when: action is defined and action.rc != 0
+
+      always:
+      - name: Delete files on {{ HOSTS }}
+        file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - /tmp/controlm-nodegroup-exist.sh
+          - /tmp/controlm_liste_nodegroup.ksh
+          - /tmp/Update_node_in_nodegrp
+
+      - name: Delete temporary files /tmp/{{NODEGROUP}}
+        shell: /bin/rm -f /tmp/{{NODEGROUP}}*
+        delegate_to: localhost
+        run_once: true
+#-------------------------------------------------------------------------------------------------------------
