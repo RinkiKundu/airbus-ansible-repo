@@ -1,0 +1,37 @@
+#!/bin/ksh
+
+# application   : CONTROLM
+# Name          : Update_node_in_nodegrp
+# langage       : script ksh
+# date creation : 25-03-2020
+# version       :
+# date version  :
+# parametres    :
+# auteur        : Delphine Tartrou
+# sortie        : stdout
+# DESCRIPION    : Add/remove  server to nodegroup
+#
+
+set -xv
+
+USAGE="Usage :  Add_node_in_nodegrp <nodegroup> <server> <action>, action = ADD or DELETE"
+
+NODEGROUP=`echo $1 |tr '[:lower:]' '[:upper:]'`
+SERVER=`echo $2 | tr '[:upper:]' '[:lower:]'`
+#ACTION=$3
+ACTION=`echo $3 |tr '[:lower:]' '[:upper:]'`
+APPLI=OS
+
+if [ $# != 3 ] ; then
+        echo ${USAGE}
+else
+	if [ $ACTION != DELETE ]
+	then
+		echo "$ACTION in progress ..."
+		ctmnodegrp -EDIT -HOSTGRP $NODEGROUP -APPLTYPE $APPLI -ADD $SERVER
+	else 
+		echo "$ACTION in progress ..."
+		ctmnodegrp -EDIT -HOSTGRP $NODEGROUP -APPLTYPE $APPLI -DELETE $SERVER
+	fi
+
+fi
