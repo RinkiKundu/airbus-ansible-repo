@@ -39,7 +39,8 @@
          msg: "SYNTBOT_OUTPUT : FAILED on {{ HOSTS }} Incorrect input PERCENT."
          
      - name: removing directory C:\Windows\Temp\*
-       win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path c:\windows\temp\* -recurse -force
+       #win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path c:\windows\temp\* -recurse -force
+       win_command: powershell.exe -ExecutionPolicy ByPass Remove-Item –path c:\windows\temp\* -Recurse -Force -ErrorAction SilentlyContinue
        changed_when: false
        ignore_errors: yes
 
