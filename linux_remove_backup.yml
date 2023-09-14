@@ -1,0 +1,95 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ MASTER if (MASTER is string) else MASTER|join(', ') }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{MASTER}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  one of the hosts is not in the inventory"
+        failed_when: True
+
+- name: Playbook check if host is Linux
+  gather_facts: false
+  hosts: "{{ MASTER }}"
+  vars:
+    MASTER:
+
+  tasks:
+    - block:
+      - name: "Fail if Variable ansible_connection is winrm"
+        assert:
+          that:
+            - ansible_connection != "winrm"
+          msg: "Playbook is for linux not windows"
+
+      rescue:
+      - name: Invalid OS for this playbook
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: {{ MASTER }} is a windows cannot run this playbook"
+        failed_when: True
+
+- name: Playbook Linux Remove Backup
+  hosts:  "{{ MASTER }}"
+  gather_facts: false
+  become: true
+  vars:
+    - MASTER:
+    - HRD_T_NAME:
+    - POLICY:
+
+  tasks:
+    - block:
+      - name: "Check if HRD_T_NAME and POLICY are not empty"
+        assert:
+          that:
+            - POLICY|length > 0
+            - HRD_T_NAME|length > 0
+
+      - name: "Check if POLICY is not for WMVARE (name starts with lxnt)"
+        assert:
+          that: POLICY is not regex("^lxnt.*")
+          msg: "wrong policy name  {{ POLICY }} start with lxnt"
+
+      - name: "remove client from policy"
+        command: "/usr/openv/netbackup/bin/admincmd/bpplclients {{ POLICY }} -delete {{ HRD_T_NAME }}"
+        register: bpcmd
+
+      - name: "checking if policy still have clients"
+        command: "/usr/openv/netbackup/bin/admincmd/bpplclients {{ POLICY }}"
+        changed_when: false
+        register: bpcli
+        failed_when: bpcli.rc not in [0,227]
+
+      - name: "remove policy if it contains no client"
+        command: "/usr/openv/netbackup/bin/admincmd/bppldelete {{ POLICY }}"
+        register: bpdel
+        when: bpcli.rc == 227
+
+      - name: Log output for SYNTBOT
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: Successful: Netbackup Client {{ HRD_T_NAME }} removed from policy {{ POLICY }} on {{ MASTER }}"
+        when: bpcli.rc != 227
+  
+      - name: Log output for SYNTBOT
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: Successful: Netbackup Client {{ HRD_T_NAME }} removed from policy {{ POLICY }} on {{ MASTER }}"
+            - "SYNTBOT_DISPLAY: RC=227 create a change to delete control-M job corresponding to policy {{ POLICY }}"
+        when: bpcli.rc == 227
+  
+      rescue:
+      - name: Log output for SYNTBOT
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed"
+        failed_when: True
