@@ -1,0 +1,623 @@
+---
+- name: Playbook 1 Check variables provided
+  hosts: localhost
+  vars:
+    AGENT:
+    ENV:
+
+  tasks:
+    - block:
+      - name: Check Variable {{ENV}}
+        assert:
+          that:
+            - AGENT | mandatory
+            - AGENT is defined
+            - ENV | mandatory
+            - ENV is defined
+            - ENV == 'VALIDATION' or ENV == 'PRODUCTION' or ENV == 'INTEGRATION' or ENV == 'DEVELOPMENT'
+          msg: "Variable AGENT:({{AGENT}}) or ENV:({{ENV}}) is not defined correctly (ENV must be VALIDATION / PRODUCTION / INTEGRATION or DEVELOPMENT)"
+      rescue:
+      - name: Failure to get variable
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: Task {{ansible_failed_task.name}} : {{ansible_failed_result.msg}}"
+        failed_when: True
+
+#----------------------------------------------------------------------------------------------------------
+# Play VALIDATION
+- name: Check if host exists in tower inventory (ControlM VALIDATION)
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+     
+      - name: End Play id ENV != VALIDATION
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'VALIDATION'
+
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory (VALIDATION)"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']" 
+        with_items: 
+          - fr0-ctmcsv01-1.eu.airbus.corp
+          - fr0-ctmcsv01-2.eu.airbus.corp
+          - fr0-ctmcsv03-1.eu.airbus.corp
+          - fr0-ctmcsv03-2.eu.airbus.corp
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  This target host {{HOSTS}} does not exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+#-----------------------------------------------------------------------------------------
+- name: Use case ControlM Check Inscription AGENT (VALIDATION)
+  hosts: "{{ HOSTS }}"
+  gather_facts: false
+  vars:
+    AGENT:
+    HOSTS: 
+      - fr0-ctmcsv01-1.eu.airbus.corp
+      - fr0-ctmcsv01-2.eu.airbus.corp
+      - fr0-ctmcsv03-1.eu.airbus.corp
+      - fr0-ctmcsv03-2.eu.airbus.corp
+    code_var:
+      - "|fr0-ctmcsv01-1.eu.airbus.corp|ctrlmval"
+      - "|fr0-ctmcsv03-1.eu.airbus.corp|ctrlmval"
+      - "|fr0-ctmcsv01-2.eu.airbus.corp|ctrlmval"
+      - "|fr0-ctmcsv03-2.eu.airbus.corp|ctrlmval"
+
+  tasks:
+    - block:
+
+      - name: End Play id ENV != VALIDATION
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'VALIDATION'
+
+      - name: Check if variables AGENT provided
+        assert:
+          that:
+            - AGENT | mandatory
+            - AGENT is defined
+          msg: "Please provide variable AGENT"
+
+      - name: Copy scripts to target host {{ HOSTS }}
+        copy:
+          src: "{{ item.src }}"
+          dest: "{{ item.dest }}"
+          mode: 0775
+        with_items:
+          - { src: 'files/Liste_nodegroups',dest: '/tmp/Liste_nodegroups'}
+
+      - name: pick up the lines we are interested in.
+        set_fact:
+          important_lines: "{{ important_lines|default([]) +  [item] }}"
+        when: item.split('|')
+        with_items: "{{ code_var }}"
+
+      - name: find the line with the name we are looking for in 2nd column
+        set_fact:
+          target_line: "{{ item }}"
+        when: item|trim is search(ansible_host)
+        with_items: "{{important_lines}}"
+
+      - name: Get the Controlm User 
+        set_fact:
+          CTRLM_USER: "{{ target_line.split('|')[2]|trim }}"
+
+      - name: Step 1 - Check if Agent {{AGENT}} already declare {{item}}
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          echo "`hostname`"
+          ctm_agstat -LIST {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: agent
+
+      - set_fact:
+          agent_lines: "{{ ansible_host }}"
+          cacheable: yes
+        when: agent.stdout is defined
+
+      - name: Step 2 - Check if Agent {{AGENT}} exist in a NODEGROUP
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          /tmp/Liste_nodegroups {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: nodegroup
+        when: agent.rc == 0
+
+      - name: set fact
+        set_fact: NodegroupIsOK="yes"
+        when: nodegroup.rc == 0
+
+      - name: "Log output for SYNTBOT OK main program (VALIDATION)"
+        debug:
+          msg: 
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: (VALIDATION) {{ansible_host}} Check Agent {{AGENT}} exist on {{nodegroup.stdout}}"
+        when: agent.rc == 0 and nodegroup.rc == 0
+
+      - name: Exit end play (Exit now)
+        meta: clear_host_errors
+
+      - name: Exit end play (Exit now)
+        meta: end_play 
+        when: nodegroup.rc == 0
+
+      rescue:
+      - name: Log output when failed main program Agent does not exist (VALIDATION)
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (VALIDATION) Agent {{AGENT}} does not exist on {{HOSTS}}"
+        failed_when: true
+        run_once: true
+        when: agent.rc != 0 
+
+      - name: Log output when failed main program Agent is not in a NODEGROUP (VALIDATION)
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (VALIDATION) Agent {{AGENT}} does not exist on any NODEGROUP"
+            - "SYNTBOT_DISPLAY: Agent {{AGENT}} exist on controlM server : {{agent_lines}}"
+        failed_when: true
+        when: nodegroup is defined and nodegroup.rc != 0 
+
+      always:
+      - name: Delete files on {{ HOSTS }}
+        file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - /tmp/Liste_nodegroups
+#-------------------------------------------------------------------------------------------------------------
+# Play INTEGRATION
+- name: Check if host exists in tower inventory (ControlM INTEGRATION)
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: End Play id ENV != INTEGRATION
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'INTEGRATION'
+
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory (INTEGRATION)"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']" 
+        with_items: 
+          - fr0-ctmcsi01-1.eu.airbus.corp
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  This target host {{HOSTS}} does not exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+#-----------------------------------------------------------------------------------------
+- name: Use case ControlM Check Inscription AGENT (INTEGRATION)
+  hosts: "{{ HOSTS }}"
+  gather_facts: false
+  vars:
+    AGENT:
+    HOSTS: 
+      - fr0-ctmcsi01-1.eu.airbus.corp
+    code_var:
+      - "|fr0-ctmcsi01-1.eu.airbus.corp|ctrlmint"
+
+  tasks:
+    - block:
+
+      - name: End Play id ENV != INTEGRATION
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'INTEGRATION'
+
+      - name: Check if variables AGENT provided
+        assert:
+          that:
+            - AGENT | mandatory
+            - AGENT is defined
+          msg: "Please provide variable AGENT"
+
+      - name: Copy scripts to target host {{ HOSTS }}
+        copy:
+          src: "{{ item.src }}"
+          dest: "{{ item.dest }}"
+          mode: 0775
+        with_items:
+          - { src: 'files/Liste_nodegroups',dest: '/tmp/Liste_nodegroups'}
+
+      - name: pick up the lines we are interested in.
+        set_fact:
+          important_lines: "{{ important_lines|default([]) +  [item] }}"
+        when: item.split('|')
+        with_items: "{{ code_var }}"
+
+      - name: find the line with the name we are looking for in 2nd column
+        set_fact:
+          target_line: "{{ item }}"
+        when: item|trim is search(ansible_host)
+        with_items: "{{important_lines}}"
+
+      - name: Get the Controlm User 
+        set_fact:
+          CTRLM_USER: "{{ target_line.split('|')[2]|trim }}"
+
+      - name: debug Agent {{AGENT}}
+        debug:
+          msg: "{{AGENT}}"
+
+      - name: Step 1 - Check if Agent {{AGENT}} already declare {{item}}
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          echo "`hostname`"
+          ctm_agstat -LIST {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: agent
+
+      - set_fact:
+          agent_lines: "{{ ansible_host }}"
+          cacheable: yes
+        when: agent.stdout is defined
+
+      - name: Step 2 - Check if Agent {{AGENT}} exist in a NODEGROUP
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          /tmp/Liste_nodegroups {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: nodegroup
+        when: agent.rc == 0
+
+      - name: set fact
+        set_fact: NodegroupIsOK="yes"
+        when: nodegroup.rc == 0
+
+      - name: "Log output for SYNTBOT OK main program (INTEGRATION)"
+        debug:
+          msg: 
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: (INTEGRATION) {{ansible_host}} Check Agent {{AGENT}} exist on {{nodegroup.stdout}}"
+        when: agent.rc == 0 and nodegroup.rc == 0
+
+      - name: Exit end play (Exit now)
+        meta: clear_host_errors
+
+      - name: Exit end play (Exit now)
+        meta: end_play 
+        when: nodegroup.rc == 0
+
+      rescue:
+      - name: Log output when failed main program Agent does not exist
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (INTEGRATION) Agent {{AGENT}} does not exist on {{HOSTS}}"
+        failed_when: true
+        run_once: true
+        when: agent.rc != 0 
+
+      - name: Log output when failed main program Agent is not in a NODEGROUP
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (INTEGRATION) Agent {{AGENT}} does not exist on any NODEGROUP"
+            - "SYNTBOT_DISPLAY: Agent {{AGENT}} exist on controlM server : {{agent_lines}}"
+        failed_when: true
+        when: nodegroup is defined and nodegroup.rc != 0 
+
+      always:
+      - name: Delete files on {{ HOSTS }}
+        file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - /tmp/Liste_nodegroups
+
+#-------------------------------------------------------------------------------------------------------------
+# Play DEVELOPMENT
+- name: Check if host exists in tower inventory (ControlM DEVELOPMENT)
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: End Play id ENV != DEVELOPMENT
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'DEVELOPMENT'
+
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory (DEV)"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: 
+          - fr0-ctmcsd01-1.eu.airbus.corp
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  This target host {{HOSTS}} does not exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+#-----------------------------------------------------------------------------------------
+- name: Use case ControlM Check Inscription AGENT (DEVELOPMENT)
+  hosts: "{{ HOSTS }}"
+  gather_facts: false
+  vars:
+    AGENT:
+    HOSTS: 
+      - fr0-ctmcsd01-1.eu.airbus.corp
+    code_var:
+      - "|fr0-ctmcsd01-1.eu.airbus.corp|ctrlmdev"
+
+  tasks:
+    - block:
+
+      - name: End Play id ENV != DEVELOPMENTDEVELOPMENT
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'DEVELOPMENT'
+
+      - name: Check if variables AGENT provided
+        assert:
+          that:
+            - AGENT | mandatory
+            - AGENT is defined
+          msg: "Please provide variable AGENT"
+
+      - name: Copy scripts to target host {{ HOSTS }}
+        copy:
+          src: "{{ item.src }}"
+          dest: "{{ item.dest }}"
+          mode: 0775
+        with_items:
+          - { src: 'files/Liste_nodegroups',dest: '/tmp/Liste_nodegroups'}
+
+      - name: pick up the lines we are interested in.
+        set_fact:
+          important_lines: "{{ important_lines|default([]) +  [item] }}"
+        when: item.split('|')
+        with_items: "{{ code_var }}"
+
+      - name: find the line with the name we are looking for in 2nd column
+        set_fact:
+          target_line: "{{ item }}"
+        when: item|trim is search(ansible_host)
+        with_items: "{{important_lines}}"
+
+      - name: Get the Controlm User 
+        set_fact:
+          CTRLM_USER: "{{ target_line.split('|')[2]|trim }}"
+
+      - name: debug Agent {{AGENT}}
+        debug:
+          msg: "{{AGENT}}"
+
+      - name: Step 1 - Check if Agent {{AGENT}} already declare {{item}}
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          echo "`hostname`"
+          ctm_agstat -LIST {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: agent
+
+      - set_fact:
+          agent_lines: "{{ ansible_host }}"
+          cacheable: yes
+        when: agent.stdout is defined
+
+      - name: Step 2 - Check if Agent {{AGENT}} exist in a NODEGROUP
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          /tmp/Liste_nodegroups {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: nodegroup
+        when: agent.rc == 0
+
+      - name: set fact
+        set_fact: NodegroupIsOK="yes"
+        when: nodegroup.rc == 0
+
+      - name: "Log output for SYNTBOT OK main program (DEVELOPMENT)"
+        debug:
+          msg: 
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: (DEVELOPMENT) {{ansible_host}} Check Agent {{AGENT}} exist on {{nodegroup.stdout}}"
+        when: agent.rc == 0 and nodegroup.rc == 0
+
+      - name: Exit end play (Exit now)
+        meta: clear_host_errors
+
+      - name: Exit end play (Exit now)
+        meta: end_play 
+        when: nodegroup.rc == 0
+
+      rescue:
+      - name: Log output when failed main program Agent does not exist (DEVELOPMENT)
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (DEVELOPMENT) Agent {{AGENT}} does not exist on {{HOSTS}}"
+        failed_when: true
+        run_once: true
+        when: agent.rc != 0 
+
+      - name: Log output when failed main program Agent is not in a NODEGROUP
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (DEVELOPMENT) Agent {{AGENT}} does not exist on any NODEGROUP"
+            - "SYNTBOT_DISPLAY: Agent {{AGENT}} exist on controlM server : {{agent_lines}}"
+        failed_when: true
+        when: nodegroup is defined and nodegroup.rc != 0 
+
+      always:
+      - name: Delete files on {{ HOSTS }}
+        file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - /tmp/Liste_nodegroups
+#-------------------------------------------------------------------------------------------------------------
+#Play PRODUCTION
+- name: Check if host exists in tower inventory (ControlM PRODUCTION)
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: End Play id ENV != PRODUCTION
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'PRODUCTION'
+
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: 
+          - fr0-ctmcsp01-1.eu.airbus.corp
+          - fr0-ctmcsp01-2.eu.airbus.corp
+          - fr0-ctmcsp02-1.eu.airbus.corp
+          - fr0-ctmcsp02-2.eu.airbus.corp
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  This target host {{HOSTS}} does not exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+#-----------------------------------------------------------------------------------------
+- name: Use case ControlM Check Inscription AGENT (PRO)
+  hosts: "{{ HOSTS }}"
+  gather_facts: false
+  vars:
+    AGENT:
+    HOSTS: 
+      - fr0-ctmcsp01-1.eu.airbus.corp
+      - fr0-ctmcsp01-2.eu.airbus.corp
+      - fr0-ctmcsp02-1.eu.airbus.corp
+      - fr0-ctmcsp02-2.eu.airbus.corp
+    code_var:
+      - "|fr0-ctmcsp01-1.eu.airbus.corp|ctrlmpro"
+      - "|fr0-ctmcsp01-2.eu.airbus.corp|ctrlmpro"
+      - "|fr0-ctmcsp02-1.eu.airbus.corp|ctrlmpro"
+      - "|fr0-ctmcsp02-2.eu.airbus.corp|ctrlmpro"
+      - "|fr0-ctmcsp03-1.eu.airbus.corp|ctrlmpro"
+      - "|fr0-ctmcsp03-2.eu.airbus.corp|ctrlmpro"
+
+  tasks:
+    - block:
+
+      - name: End Play id ENV != PRODUCTION
+        meta: end_play
+        when: hostvars['localhost']['ENV'] is defined and hostvars['localhost']['ENV'] != 'PRODUCTION'
+
+      - name: Check if variables AGENT provided
+        assert:
+          that:
+            - AGENT | mandatory
+            - AGENT is defined
+          msg: "Please provide variable AGENT"
+
+      - name: Copy scripts to target host {{ HOSTS }}
+        copy:
+          src: "{{ item.src }}"
+          dest: "{{ item.dest }}"
+          mode: 0775
+        with_items:
+          - { src: 'files/Liste_nodegroups',dest: '/tmp/Liste_nodegroups'}
+
+      - name: pick up the lines we are interested in.
+        set_fact:
+          important_lines: "{{ important_lines|default([]) +  [item] }}"
+        when: item.split('|')
+        with_items: "{{ code_var }}"
+
+      - name: find the line with the name we are looking for in 2nd column
+        set_fact:
+          target_line: "{{ item }}"
+        when: item|trim is search(ansible_host)
+        with_items: "{{important_lines}}"
+
+      - name: Get the Controlm User 
+        set_fact:
+          CTRLM_USER: "{{ target_line.split('|')[2]|trim }}"
+
+      - name: Step 1 - Check if Agent {{AGENT}} already declare {{item}}
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          echo "`hostname`"
+          ctm_agstat -LIST {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: agent
+
+      - set_fact:
+          agent_lines: "{{ ansible_host }}"
+          cacheable: yes
+        when: agent.stdout is defined
+
+      - name: Step 2 - Check if Agent {{AGENT}} exist in a NODEGROUP
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+          source ~/.cshrc
+          /tmp/Liste_nodegroups {{AGENT}}
+        args:
+          executable: /bin/csh
+        register: nodegroup
+        when: agent.rc == 0
+
+      - name: set fact
+        set_fact: NodegroupIsOK="yes"
+        when: nodegroup.rc == 0
+
+      - name: "Log output for SYNTBOT OK main program (PRODUCTION) "
+        debug:
+          msg: 
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: (PRODUCTION) {{ansible_host}} Check Agent {{AGENT}} exist on {{nodegroup.stdout}}"
+        when: agent.rc == 0 and nodegroup.rc == 0
+
+      - name: Exit end play (Exit now)
+        meta: clear_host_errors
+
+      - name: Exit end play (Exit now)
+        meta: end_play 
+        when: nodegroup.rc == 0
+
+      rescue:
+      - name: Log output when failed main program Agent does not exist (PRODUCTION)
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (PRODUCTION) Agent {{AGENT}} does not exist on {{HOSTS}}"
+        failed_when: true
+        run_once: true
+        when: agent.rc != 0 
+
+      - name: Log output when failed main program Agent is not in a NODEGROUP
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: (PRODUCTION) Agent {{AGENT}} does not exist on any NODEGROUP"
+            - "SYNTBOT_DISPLAY: Agent {{AGENT}} exist on controlM server : {{agent_lines}}"
+        failed_when: true
+        when: nodegroup is defined and nodegroup.rc != 0 
+
+      always:
+      - name: Delete files on {{ HOSTS }}
+        file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - /tmp/Liste_nodegroups
+#-------------------------------------------------------------------------------------------------------------
