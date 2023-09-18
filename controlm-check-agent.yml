@@ -1,0 +1,28 @@
+---
+    - block:
+
+      - name: Check if Agent {{SERVER}} already declare {{ ansible_host }}
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+            source ~/.cshrc
+            ctm_agstat -LIST {{SERVER}}
+        args:
+          executable: /bin/csh
+        register: agent
+        when: ansible_host in nodegroup.stdout
+
+      - name: Log output when SUCCESSFUL Agent {{SERVER}} exist {{ ansible_host }}
+        debug:
+          msg: "SUCCESSFUL: Agent {{SERVER}} exist on ControlM server {{nodegroup.stdout}}"
+
+      rescue:
+      - name: Log output when failed Agent {{SERVER}} does not exist {{ ansible_host }}
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Agent {{SERVER}} does not exist on ControlM server {{nodegroup.stdout}}"
+
+      - name: Exit now
+        meta:  end_play
+        failed_when: true
+#----------------------------------------------------------------------------------------------
