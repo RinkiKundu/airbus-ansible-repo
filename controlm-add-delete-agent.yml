@@ -1,0 +1,23 @@
+---
+    - block:
+
+      - name: "ADD or DELETE  ACTION {{ACTION}} Agent {{SERVER}} Nodegroup {{NODEGROUP}} {{ ansible_host }}"
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: "source ~/.cshrc ; /tmp/Update_node_in_nodegrp  {{NODEGROUP}} {{SERVER}} {{ACTION}}"
+        when: ansible_host in nodegroup.stdout
+        args:
+          executable: /bin/csh
+
+      - name: Log outpout when SUCCESSFUL Add or Delete  Agent
+        debug:
+          msg: "SUCCESSFUL: Action -> Update_node_in_nodegrp  {{NODEGROUP}} {{SERVER}} {{ACTION}}"
+
+      rescue:
+      - name: Log output when failed Add or delete Agent
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Action -> Update_node_in_nodegrp  {{NODEGROUP}} {{SERVER}} {{ACTION}}"
+            - "SYNTBOT_DISPLAY: Result message : {{ ansible_failed_result.msg }}"
+        failed_when: true
+#----------------------------------------------------------------------------------------------
