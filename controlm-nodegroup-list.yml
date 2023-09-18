@@ -1,0 +1,35 @@
+---
+    - block:
+
+      - name: "ControlM List Nodegroup {{NODEGROUP}} on {{nodegroup.stdout}}"
+        become_user: "{{CTRLM_USER}}"
+        become: true
+        shell: |
+            source ~/.cshrc
+            ksh /tmp/controlm_liste_nodegroup.ksh {{NODEGROUP}} > /tmp/{{NODEGROUP}}_{{ansible_host}}
+            chmod 777 /tmp/{{NODEGROUP}}*
+        args:
+          executable: /bin/csh
+        register: node
+        #when: ansible_host in nodegroup.stdout
+
+      - name: "Copy file from {{ansible_host}} to Execution node"
+        fetch:
+          src: /tmp/{{NODEGROUP}}_{{ansible_host}}
+          dest: /tmp/
+          flat: yes
+
+      - name: Log output when SUCCESSFUL List {{NODEGROUP}} 
+        debug:
+          msg: "SUCCESSFUL: List agent for {{NODEGROUP}} on controlm server {{nodegroup.stdout}}"
+
+      rescue:
+      - name: Log output when failed {{NODEGROUP}} does not exist {{nodegroup.stdout}}
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: List agent for {{NODEGROUP}} on ControlM server {{nodegroup.stdout}}"
+
+      - name: Exit now because Failure
+        meta:  end_play
+        failed_when: true
+#----------------------------------------------------------------------------------------------
