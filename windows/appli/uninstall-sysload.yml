@@ -1,0 +1,114 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUPUT: FAILED:  This target host {{HOSTS}} does not  exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+- name: Playbook check if host is Windows
+  gather_facts: false
+  hosts: "{{ HOSTS }}"
+  vars:
+    HOSTS:
+  tasks:
+    - block:
+      - name: "Fail if Variable ansible_connection is not winrm "
+        assert:
+          that:
+            - ansible_connection == "winrm"
+          msg: "Playbook is for Windows not Linux"
+
+      rescue:
+      - name: Invalid OS for this playbook
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: {{ HOSTS }} is a Linux cannot run this playbook"
+        failed_when: True
+
+# uninstall sysload client
+- name: uninstall sysload client
+  gather_facts: false
+  hosts: "{{ HOSTS }}"
+  vars:
+    ADM_HOST: de0-monas-p01.eu.airbus.corp
+    SCRIPT: /local/opt/Automation/Sysload/bin/sldRemoveAgent.sh
+    INST_DIR: ''
+    PATH: ''
+    EMPTY: ""
+    DQUOTE: '"'
+    separator: '\hom\'
+
+  tasks:
+    - block:
+      - name: check if sysload is installed
+        win_service:
+          name: "Sysload FileServer"
+        register: sysload_srv
+        changed_when: false
+        failed_when: false
+
+      - name: retrieve PATH from service
+        set_fact:
+          PATH: "{{ sysload_srv.path | regex_replace(DQUOTE, EMPTY) }}"
+        when: sysload_srv.exists
+
+      - name: Get install dir from path
+        set_fact:
+          # get directory before /hom/ in service path
+          INST_DIR: "{{ PATH.split(separator)[0] }}"
+        when: sysload_srv.exists
+
+#      - name: debug
+#        debug:
+#          msg: "--{{INST_DIR}}--"
+#        failed_when: true
+
+      - name: uninstall sysload client
+        win_command: 'cmd /c {{INST_DIR}}\adm\collector_windows\setup.exe -mode silent -task uninstall -admindir {{INST_DIR}}\adm -stplogdir {{INST_DIR}}\adm\log'
+        when: sysload_srv.exists
+
+      - name: "remove sysload directory {{INST_DIR}}"
+        win_shell: rmdir /S /Q "{{INST_DIR}}"
+        args:
+          executable: cmd.exe
+        when: sysload_srv.exists
+
+      - name: Remove sysload client on sysload console
+        shell: "{{ SCRIPT }} {{ansible_host}}"
+        register: result
+        failed_when: false
+        delegate_to: "{{ ADM_HOST }}"
+        vars:
+          ansible_ssh_user: '{{ lookup("env", "ANSIBLE_NET_USERNAME") }}'
+          ansible_ssh_pass: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") }}'
+          ansible_become: no
+        when: sysload_srv.exists
+
+      - name: "assert RC=0 or 4 for {{ SCRIPT }}"
+        assert:
+          that: result.rc == 0 or result.rc == 4
+          msg: "{{result.stdout}}"
+        when: sysload_srv.exists
+
+      - name: Log output when successful
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: SUCCESSFUL uninstall of sysload on {{ ansible_host }}"
+
+      rescue:
+      - name: Log output when failed
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed on {{ ansible_host }}: {{ ansible_failed_result.msg }}"
+        failed_when: True
