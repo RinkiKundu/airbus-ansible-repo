@@ -1,0 +1,53 @@
+#!/bin/ksh
+
+# application   : CONTROLM
+# Name          : liste_nodegroups
+# langage       : script ksh
+# date creation : 27-FEB-2013
+# version       :
+# date version  :
+# parametres    :
+# auteur        : O.BRETHEAU
+# sortie        : stdout
+# DESCRIPION    : search Agent in ALL NODEGROUPS
+#
+
+
+USAGE="Usage :  liste_nodegroups node_id  or liste_nodegroups ALL"
+
+AGENT=$1
+
+if [ $# != 1 ] ; then
+        echo ${USAGE}
+else
+
+#echo "Recherche en cours ..."
+
+TEMPO="/tmp/liste_nodegroup_tempo"
+TEMPO2="/tmp/liste_nodegroup_tempo2"
+> ${TEMPO}
+> ${TEMPO2}
+ctmnodegrp -list |  egrep -v 'Application|==' | awk -F" " '{print $1,$2}'| sed '/^ $/d' > ${TEMPO}
+
+while read line
+do
+	nodegroup=`echo $line| cut -f1 -d " "`
+	appli=`echo $line| cut -f2  -d " "`
+	ctmnodegrp -EDIT   -NODEGRP $nodegroup  -APPLTYPE $appli -view >> ${TEMPO2}
+	#echo $nodegroup
+	#echo $appli
+done < ${TEMPO}
+
+#cat $TEMPO2 egrep -v 'NodeGroup|==' |sed '/^ $/d' > $TEMPO
+#cat $TEMPO
+
+if [ ${AGENT} == "ALL" ]
+then
+	echo "NodeGroup Name                                       Node ID"
+	echo "============================================================"
+	cat ${TEMPO2}
+else
+	grep -w ${AGENT} ${TEMPO2}
+fi
+
+fi
