@@ -1,0 +1,72 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: 
+          - de0-monas-p01.eu.airbus.corp
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED:  This target host {{HOSTS}} does not  exist in tower Ansible Inventory 2L22"
+        failed_when: True
+
+- name: Check Server Monitoring
+  hosts: de0-monas-p01.eu.airbus.corp
+  gather_facts: false
+  become: false
+  vars:
+    - SCRIPT: /local/opt/Automation/MRS/bin/mrsCheckCiSys.sh
+    - RETURN:
+        0:
+          text: OK (System MRS only)
+        1:
+          text: NO MRS Linked to this CI
+        2:
+          text: Only one MRS linked but not SYSTEM
+        3:
+          text: At least one MRS contains this CI
+        8:
+          text: Running as root not allowed
+
+  tasks:
+    - block:
+#      - name: shell
+#        shell: "echo rc=1 ;exit 1"
+#        register: result
+#        failed_when: false
+
+      - name: "Check Server Monitoring on adminstration server {{ansible_host}}"
+        shell: "{{ SCRIPT }} {{HOSTS}}" 
+        register: result
+        failed_when: false
+        vars:
+          ansible_ssh_user: '{{ lookup("env", "ANSIBLE_NET_USERNAME") }}'
+          ansible_ssh_pass: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") }}'
+          ansible_become: no
+
+      - name: "assert RC=0, 1, 2, 3 or 8 for {{ SCRIPT }}"
+        assert:
+          that: result.rc == 0 or result.rc == 1 or result.rc == 2 or result.rc == 3 or result.rc == 8
+          success_msg: "{{result.rc}}: {{result.stdout}}"
+
+      - name: Log output when successful
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: SUCCESSFUL check monitoring on {{ HOSTS }}"
+            - "SYNTBOT_DISPLAY: {{ SCRIPT }} returned {{ result.rc }}: {{RETURN[(result.rc|int)].text}}"
+
+      rescue:
+      - name: Log output when failed
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed on {{ ansible_host }}"
+            - "SYNTBOT_DISPLAY: {{ SCRIPT }} returned {{ result.rc|default('99') }}: Unexpected error code"
+        failed_when: True
