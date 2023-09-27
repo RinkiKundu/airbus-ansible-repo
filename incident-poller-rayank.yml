@@ -1,0 +1,174 @@
+---
+- name: Fetch Incident and Update Incident fields data from ServiceNow
+  hosts: localhost
+  gather_facts: true
+
+  vars:
+    servicenow_instance: "https://dev141143.service-now.com"
+    # servicenow_user: "admin"
+    # servicenow_password: "ti!Uk/0qVHA7"
+      #alerts: "['CPU Alert', 'Service Alert']"
+    param: "?sysparm_query=short_descriptionLIKE"
+    state: "%5Estate%3D1"
+    mysql_query: "SELECT alert_name FROM incidentdata.config_table;"
+    pat_token: "{{ pat_token }}"
+
+  tasks:
+
+    - block:
+        - name: Print PAT token 
+          debug:
+            var: pat_token
+    
+        - name: Call the MySQL Query Playbook
+          include_tasks: mysql_query_playbook.yml
+          vars:
+            query: "{{ mysql_query }}"
+          register: alert_names
+
+        - name: print var
+          debug:
+            var: alert_names
+
+        # - name: Base64 encode credentials
+        #   set_fact:
+        #     encoded_credentials: "{{ (servicenow_user ~ ':' ~ servicenow_password) | b64encode }}"
+        #   no_log: true
+
+        - name: Add %20 to Variables
+          set_fact:
+            encoded_search_queries: "{{ encoded_search_queries | default([]) + [item | replace(' ', '%20')] }}"
+          loop: "{{ alert_names }}"
+          loop_control:
+            loop_var: item
+
+        - name: Display Encoded Search Queries
+          debug:
+            var: encoded_search_queries
+
+
+        - name: Fetch Incidents based on alert type and state
+          uri:
+            url: "{{ servicenow_instance }}/api/now/table/incident{{ param }}{{ item }}{{ state }}"
+            method: GET
+            headers:
+              Accept: "application/json"
+              #Authorization: "Basic {{ encoded_credentials | string }}"
+              Authorization: "Bearer {{ pat_token }}"
+
+            return_content: yes
+            force_basic_auth: yes
+          loop: "{{ encoded_search_queries }}"
+          loop_control:
+            loop_var: item
+          register: incident_data
+
+        - name: Display incident data
+          debug:
+            var: incident_data
+
+
+              #####Optional code to fetch only specific field from a INC  ####
+
+        - name: Extract incident data
+          set_fact:
+            extracted_incidents: "{{ incident_data.results | json_query('[].json.result[*]') }}"
+
+        - name: Display Extract incident data
+          debug:
+            var: extracted_incidents
+
+        - name: Initialize a list to store incident numbers
+          set_fact:
+            incident_numbers: []
+            short_Descriptions: []
+            ci_name: []
+            description: []
+
+        - name: extract specific field
+          set_fact:
+            incident_numbers: "{{ incident_numbers + [item.0.number] }}"
+            short_Descriptions: "{{ short_Descriptions + [item.0.short_description] }}"
+            description: "{{ description + [item.0.description] }}"
+            ci_name: "{{ ci_name + [item.0.cmdb_ci] }}"
+          loop: "{{ extracted_incidents }}"
+          when: item | length > 0
+
+        - name: Display extracted incident numbers
+          debug:
+            var: incident_numbers
+
+        - name: print
+          debug:
+            var: short_Descriptions
+            
+        - name: Extract incident numbers and short descriptions
+          set_fact:
+            final_incident_data: "{{ final_incident_data | default([]) + [{'Incident-number': item.json.result[0].number, 'ci_name': item.json.result[0].cmdb_ci, 'short_description': item.json.result[0].short_description, 'description': item.json.result[0].description}] }}"
+          loop: "{{ incident_data.results }}"
+          when: item.json.result | length > 0 
+
+ 
+
+        - name: Display final incident data
+          debug:
+            var: final_incident_data
+
+
+        - name: call validator template in loop
+          include_tasks: triggering-template-validator.yml
+          vars:
+            incident_data_validator: "{{ item }}"
+          loop: "{{ final_incident_data }}"
+          loop_control:
+            loop_var: item  # This defines the loop variable 'item'
+  
+
+      rescue:
+        - name: Log Output For Failure
+          debug:
+            msg: "Log : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+          failed_when: True
+
+
+
+        #############code to write log in the database
+
+
+        #- name: write log
+        #  set_fact:
+        #    write_log_table: "{{ ansible_failed_result }}"
+        #- name: print log
+        #  debug:
+        #    var: write_log_table.msg
+        #- name: Remove Single Quotes
+        #  set_fact:
+        #    clean_msg: "{{ write_log_table.msg | replace(\"'\", '') }}"
+
+        #- name: Display Cleaned Message
+        #  debug:
+        #    var: clean_msg
+
+
+        #- name: Display Current Date and Time
+        #  set_fact:
+        #    dateTime: "{{ ansible_date_time.date }}_{{ ansible_date_time.time }}"
+        #- name: print date time
+        #  debug:
+        #    var: dateTime
+
+        #- name: write log in db
+        #  community.mysql.mysql_query:
+        #    login_host: "194.195.112.205"
+        #    login_user: "root"
+        #    login_port: "30517"
+        #    login_password: "IRONMAN"
+        #    login_db: incidentdata
+        #    query: "INSERT INTO `incidentdata`.`logTable` (`Date`, `ErrorMessage`) VALUES ('{{ dateTime }}', '{{ clean_msg }}');"
+              #query: "INSERT INTO incidentdata.logTable (Date, ErrorMessage) VALUES (``,`{{ write_log_table.msg }}`);"
+              #  failed_when: True
+              # register: res
+
+        # - name: print res
+        #  debug:
+        #    var: res
