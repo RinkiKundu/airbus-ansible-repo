@@ -42,7 +42,7 @@
        debug:
         msg: "{{ SERVICE }}"      
        
-     - name: Log output for SYNTBOT service status before restart
+     - name: Log output for service status before restart
        win_shell:
          Get-Service "{{ SERVICE }}"
        changed_when: false
@@ -52,18 +52,18 @@
          name: "{{ SERVICE }}"
          state: restarted
      
-     - name: Log output for SYNTBOT service status after restart
+     - name: Log output for service status after restart
        win_shell:
          Get-Service "{{ SERVICE }}"
        changed_when: false
 
-     - name: Log output for SYNTBOT when successful
+     - name: Log output for when successful
        debug:
          msg:
           - "OUTPUT: SUCCESSFUL on {{ HOSTS }} on {{ SERVICE }}"
 
      rescue:
-     - name: Log output for SYNTBOT when failed
+     - name: Log output for when failed
        debug:
          msg:
           - "OUTPUT: FAILED : Task {{ ansible_failed_task.name}} failed on {{ HOSTS }} : {{ ansible_failed_result.msg }}"
