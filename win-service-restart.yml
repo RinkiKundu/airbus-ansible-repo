@@ -60,7 +60,7 @@
      - name: Log output for when successful
        debug:
          msg:
-          - "OUTPUT: SUCCESSFUL on {{ HOSTS }} on {{ SERVICE }}"
+          - "OUTPUT: SUCCESSFUL on {{ HOSTS }} for {{ SERVICE }}"
 
      rescue:
      - name: Log output for when failed
