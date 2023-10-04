@@ -1,0 +1,14 @@
+---
+- hosts: localhost
+  gather_facts: no
+  vars:
+    job_id: 658
+
+  tasks:
+  - name: Get job output
+    ansible.builtin.command: ansible-tower job results {{ job_id }}
+    register: job_output
+
+  - name: Print job output
+    debug:
+      msg: "{{ job_output.stdout }}"
