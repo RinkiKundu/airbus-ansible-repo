@@ -1,0 +1,107 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+   
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "SYNTBOT_OUTPUT : FAILED :  This target host {{ HOSTS }} does not exist in Tower Ansible Inventory 2L22"
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+        
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg:
+            - "SYNTBOT_DISPLAY : Invalid input found"
+
+        failed_when: True
+
+- name: Playbook  freespace disk C
+  #gather_facts: true
+  gather_facts: false
+  hosts: "{{ HOSTS }}"
+    
+  vars:
+   DRIVE:
+   HOSTS:
+   PERCENT:
+
+  tasks:
+   - block:
+     - name: Assert that PERCENT is provided
+       assert:
+         that:
+           - PERCENT is defined
+           - PERCENT >= 0
+           - PERCENT < 100
+         msg: "SYNTBOT_OUTPUT : FAILED on {{ HOSTS }} Incorrect input PERCENT."
+         
+     - name: Assert that DRIVE is provided
+       assert:
+         that:
+           - DRIVE is defined
+           - DRIVE is regex ('[A-Z]')
+         msg: "SYNTBOT_OUTPUT : FAILED on {{ HOSTS }} Incorrect input DRIVE."
+
+     - name: check if drive exists
+       win_shell: |
+        $mydrive="{{ DRIVE|quote }}:"
+        $driveletters = Test-Path -Path $mydrive 
+        #$driveLetters= (Get-Volume).DriveLetter
+        #if ($driveLetters -contains $mydrive)
+        $DriveletterExists = Test-Path -Path $mydrive
+        If ( $DriveletterExists ) {
+
+        {
+           write-output "DriveLetter ${mydrive} exists" 
+        }
+        else
+        {
+           write-output "ERROR DriveLetter ${mydrive} doesn t exist"
+        }
+
+       register: out
+       changed_when: false
+       failed_when: out.stdout | trim is search('ERROR')
+
+     - name: Drive freespace
+       win_shell: |
+        $paramdisplay={{ PERCENT }}
+        $mydrive="{{ DRIVE|quote }}"
+        $param=([int]($paramdisplay*100+1))/100
+        
+        $freespace=Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='${mydrive}:'" | Foreach-Object {$_.FreeSpace}
+         $size=Get-WmiObject Win32_LogicalDisk -Filter "DeviceID='${mydrive}:'" | Foreach-Object {$_.Size}
+         $percent=$freespace/$size*100
+         
+         $percent=([int]($percent*100))/100
+         
+         if ($percent -gt $param ) {
+           write-output "Freespace left on ${mydrive}: $percent%: OK (> $paramdisplay%)"
+         }
+         else
+         {
+           write-output "Freespace left on ${mydrive}: $percent%: Insufficient (< $paramdisplay%)"
+         }
+
+       register: out
+       changed_when: false
+       failed_when: out.stdout | trim is search('Insufficient')
+       
+     - name: Log output for SYNTBOT when successful
+       debug:
+         msg:
+           - "SYNTBOT_OUTPUT : SUCCESSFUL on {{ HOSTS }}"
+           - "SYNTBOT_DISPLAY : {{ out.stdout_lines | to_yaml }}"
+ 
+     rescue:
+     - name: Log output for SYNTBOT when failed
+       debug:
+         msg:
+          - "SYNTBOT_OUTPUT : FAILED : Task {{ ansible_failed_task.name}} failed on {{ HOSTS }}"
+          - "SYNTBOT_DISPLAY : {{ out.stdout_lines | default ('not valued')  | to_yaml }}"
+       failed_when: True
