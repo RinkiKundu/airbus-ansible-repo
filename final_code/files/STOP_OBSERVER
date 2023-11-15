@@ -1,0 +1,49 @@
+#**************************************************************************************
+# file          : STOP_OBSERVER
+# creation date : 28/05/2018
+# Who           : ABC DBA Team
+# version       : 1.0
+# description   : Stop an OBSERVER process for a target Database
+#
+# parameters    : Database name
+#**************************************************************************************
+
+#**************************************************************************************
+# date version   : Auteur        : Commentaire
+#**************************************************************************************
+# 07/10/2019 1.1 : PAL           : Add a check on observer process and kill it if always
+#                                   exists after the stop
+#**************************************************************************************
+
+echo "Nb arg:" $#
+
+if [ $# -lt 1 ]
+then
+    echo "Usage: $0 <DB>, and <DB>.conf exists at the same level"
+    exit -1
+fi
+#UNCRYPT CONF FILES
+./UNCRYPT 2>&1
+
+
+DB=$1.conf
+
+if ! test -f $DB
+then
+    echo "WARNING: $DB not existing"
+    exit -2
+fi
+
+# Setting parameters
+. ./env11204
+. ./$DB
+
+echo "... Stopping observer for $DB ..."
+#nohup dgmgrl -logfile ${HOME}/OBSERVER/log/observer${DB_UNIQUE_NAME}.log sys/${SYS_PASSWORD} "STOP OBSERVER FILE='${HOME}/OBSERVER/fsfoOBS${DB_UNIQUE_NAME}.dat'" >/dev/null & dgmgrl -logfile ${HOME}/OBSERVER/log/observer${DB_UNIQUE_NAME}.log sys/${SYS_PASSWORD} "STOP OBSERVER"
+vivant=`ps -edf | grep observer${DB_UNIQUE_NAME} |  grep -v 'grep' | awk '{print $2}'`
+if [ "$vivant" != "" ]
+then
+  ps -edf | grep observer${DB_UNIQUE_NAME} | grep -v "grep"
+  echo " process $vivant is going to be killed "
+  kill -9 $vivant
+fi
