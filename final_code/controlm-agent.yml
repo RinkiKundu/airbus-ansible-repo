@@ -1,0 +1,100 @@
+---
+# Check the Control-M service and _Control-M firewall rule on windows host 
+- name: Check if host exists in tower inventory
+
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: This target host {{ HOSTS }} does not exist in the Ansible Tower Inventory 2L22"
+        failed_when: True
+
+- name: Playbook Windows is Alive
+  hosts: "{{ HOSTS }}"
+  gather_facts: false
+  vars:
+    - HOSTS:
+  tasks:
+    - block:
+      - name: Check if host winrm available
+        wait_for:
+          host: "{{ inventory_hostname }}"
+          port: 5985
+          connect_timeout: 2
+          timeout: 2
+        delegate_to: localhost
+
+      - name: Gathering facts
+        setup:
+
+      - name: Log output for SYNTBOT
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: {{ ansible_host }} is up "
+
+      rescue:
+      - name: Log output for SYNTBOT
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed"
+        failed_when: True
+
+        
+- name: windows control-M agent check
+  vars: 
+    HOSTS:
+  hosts: "{{ HOSTS }}"
+  tasks:
+   - block:
+     - name: Log output for SYNTBOT service status
+       win_shell: |
+         $retour=Get-Service ctmag*
+         if (Get-Variable retour -Scope Global -ErrorAction SilentlyContinue) {
+            $retour.status
+            }
+            else
+            {
+            write-output("Not found")
+            }
+         
+         
+         
+       register: service_result
+       changed_when: false
+
+     - name: Log output for SYNTBOT and control firewall rule status
+       win_shell: |
+         $resultat=Get-NetFirewallRule -name *control*
+         if (Get-Variable resultat -Scope Global -ErrorAction SilentlyContinue) {
+               $resultat.action
+               }
+               else
+               {
+               write-output("Not found")
+               }
+       register: firewall_result
+       changed_when: false
+       
+     - name: Log output for SYNTBOT when successful
+       debug:
+         msg:
+          - "SYNTBOT_OUTPUT: SUCCESSFUL on {{ HOSTS }}"
+          - "SYNTBOT_DISPLAY1: Control-M service status: {{ service_result.stdout_lines | to_nice_yaml }}"
+          - "SYNTBOT_DISPLAY2: Control-M firewall rule status: {{ firewall_result.stdout_lines | to_nice_yaml}}"
+
+     rescue:
+     - name: Log output for SYNTBOT when failed
+       debug:
+         msg:
+          - "SYNTBOT_OUTPUT: FAILED : Task {{ ansible_failed_task.name}} failed on {{ HOSTS }} : {{ ansible_failed_result.msg }}"
+       failed_when: True
