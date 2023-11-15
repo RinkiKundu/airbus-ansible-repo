@@ -1,0 +1,113 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: This target host {{ HOSTS }} does not exist in the Ansible Tower Inventory 2L22"
+        failed_when: True
+
+- name: Check if host has the right OS
+  gather_facts: false
+  hosts: "{{ HOSTS }}"
+  vars:
+    HOSTS:
+
+  tasks:
+    - block:
+      - name: "Fail if Variable ansible_connection is winrm"
+        assert:
+          that:
+            - ansible_connection != "winrm"
+          msg: "playbook is for linux not windows"
+
+      rescue:
+      - name: Invalid OS for this playbook
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: {{ HOSTS }} is a windows cannot run this playbook"
+        failed_when: True
+
+- name: SPEC for ControlM on Linux
+  gather_facts: true
+  gather_subset: hardware
+  hosts: "{{ HOSTS }}"
+  become: true
+  vars:
+    HOSTS: 
+
+  tasks:
+    - block:
+      - name: "Check if host is available on port SSH (22)"
+        wait_for:
+          host: "{{ inventory_hostname }}"
+          port: 22
+          connect_timeout: 2
+          timeout: 2
+          msg: "Fail to connect on port ssh(22) please check if service is running on {{ inventory_hostname }}"
+        delegate_to: localhost
+        become: false
+
+      - name: Check if server is managed by ALiCS
+        shell: "yum list installed aicb-alics-config | grep aicb"
+        args:
+          warn: no
+        register: alics
+        changed_when: false
+        ignore_errors: yes
+      
+      - name: Check ALiCS version
+        set_fact:
+          alics_version: "{{ alics.stdout | regex_replace('^aicb-alics-config.noarch  *(.*) .*$', '\\1') | trim }}"
+        when: alics.failed != true
+
+      - name: compare ALiCS version with version 1.0.0-260
+        set_fact:
+          alics_compare: "{{ 'is greater than 1.0.0-260' if alics_version is version('1.0.0-260', '>') else 'is lesser than 1.0.0-260' }}"
+        when: alics.failed != true
+
+      - name: check if auto_home is managed by puppet
+        shell: '/local/opt/alics/bin/pupinfo -i | grep auto_home'
+        register: pup_home
+        changed_when: false
+        ignore_errors: yes
+        when: alics.failed != true
+
+      - name: "check roles in /etc/facter/facts.d/{{ansible_fqdn}}.txt"
+        shell: 'grep roles /etc/facter/facts.d/{{ansible_fqdn}}.txt'
+        register: pup_roles
+        changed_when: false
+        ignore_errors: yes
+        when: alics.failed != true
+
+      - name: Log output for SYNTBOT when successful
+        debug:
+          msg:
+           - "SYNTBOT_OUTPUT: SUCCESSFUL: Agent ControlM spec passed on host {{HOSTS}}"
+           - "SYNTBOT_DISPLAY1: ALiCS version: {{ alics_version }} {{ alics_compare }}"
+           - "SYNTBOT_DISPLAY2: {{ 'auto_home is managed by puppet' if pup_home.failed != true else 'auto_home is NOT managed by puppet' }}"
+           - "SYNTBOT_DISPLAY3: {{ pup_roles.stdout  if pup_roles.failed != true else 'no roles found' }}"
+        when: alics.failed != true
+
+      - name: Log output for SYNTBOT when successful without ALiCS
+        debug:
+          msg:
+           - "SYNTBOT_OUTPUT: SUCCESSFUL: Agent ControlM spec passed on host {{HOSTS}}"
+           - "SYNTBOT_DISPLAY1: ALiCS is not installed"
+        when: alics.failed == true
+
+      rescue:
+      - name: Log output for SYNTBOT when failed
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed"
+        failed_when: True
