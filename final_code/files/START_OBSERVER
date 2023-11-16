@@ -1,0 +1,38 @@
+echo "Nb arg:" $#
+ 
+if [ $# -lt 1 ]
+then
+    echo "Usage: $0 <DB>, and <DB>.conf exists at the same level"
+    exit -1
+fi
+#UNCRYPT CONF FILES
+./UNCRYPT 2>&1
+ 
+DB=$1.conf
+ 
+if ! test -f $DB
+then
+    echo "WARNING: $DB not existing"
+    exit -2
+fi
+ 
+# Setting parameters
+. ./env12201
+. ./$DB
+ 
+echo ">>>>>>====================================="
+echo "... Stop OBSERVER for "$DB
+dgmgrl sys/${SYS_PASSWORD} "STOP OBSERVER"
+ 
+echo "... Launching observer..."
+nohup dgmgrl -logfile ${HOME}/OBSERVER/log/observer${DB_UNIQUE_NAME}.log sys/${SYS_PASSWORD} "START OBSERVER FILE='${HOME}/OBSERVER/log/fsfoOBS${DB_UNIQUE_NAME}.dat'" >/dev/null &
+ 
+echo "PID=" $!
+ 
+#tail ${HOME}/OBSERVER/log/observer${DB_UNIQUE_NAME}.log
+ 
+echo "... Enable OBSERVER"
+dgmgrl sys/${SYS_PASSWORD} "ENABLE fast_start failover"
+ 
+echo "<<<<<<====================================="
+./CRYPT 2>&1
