@@ -1,1 +1,76 @@
+---
+- name: Token generation
+  hosts: localhost
+  gather_facts: yes 
+  
+  tasks:
+    - block:
+      - name: To declare all the variable
+        set_fact:
+          instance_url: "{{ var_url }}"
+          password: "{{ var_pass }}"
+          username: "{{ var_user }}"
+          client_id: "{{ var_client_id }}"
+          client_secret: "{{ var_client_secret  }}"
+          tower_hostname: "{{ var_tower_hostname }}"
+          tower_username: "{{ var_tower_username }}"
+          tower_password: "{{ var_tower_password }}"
 
+      - name: Define token endpoint URL
+        set_fact:
+          token_endpoint: "{{ instance_url }}/oauth_token.do"
+
+      - name: Create data dictionary
+        set_fact:
+          data:
+            grant_type: password
+            client_id: "{{ client_id }}"
+            client_secret: "{{ client_secret }}"
+            username: "{{ username }}"
+            password: "{{ password }}"
+
+      - name: Get ServiceNow Token
+        uri:
+          url: "{{ token_endpoint }}"
+          method: POST
+          body_format: form-urlencoded
+          body: "{{ data }}"
+        register: response
+
+      - name: Print response
+        debug:
+          var: response.json.access_token
+
+      - name: set fact PAT token
+        set_fact:
+          patToken: "{{ response.json.access_token }}"      
+
+      - name: Trigger a incident poller template 
+        awx.awx.job_launch:
+          tower_host: "{{ tower_hostname }}"
+          tower_username: "{{ tower_username }}"
+          tower_password: "{{ tower_password }}"
+          validate_certs: False  # Set to True if you want to validate SSL certificates
+          job_template: Incident_poller
+          credentials:
+            - "11"  #DB Creds
+            - "15"  #Tower Creds
+          extra_vars:
+            pat_token: "{{ patToken }}"
+            instance_url: "{{ var_url }}"
+        register: job_launch_result  
+
+      rescue:
+      
+        - name: set fact ansible_failed_result
+          set_fact:
+            ansible_fail_result: "{{ ansible_failed_result.msg  }}"
+
+        - name: print ansible_fail
+          debug:
+            var: ansible_fail_result 
+
+        - name: call logging playbook 
+          include_tasks: logging.yml
+          vars:
+            ansible_failed_results: "{{ ansible_fail_result  }}"       
