@@ -51,7 +51,7 @@
           tower_username: "{{ tower_username }}"
           tower_password: "{{ tower_password }}"
           validate_certs: False  # Set to True if you want to validate SSL certificates
-          job_template: 68
+          job_template: "68"
           credentials:
             - "11"  #DB Creds
             - "15"  #Tower Creds
