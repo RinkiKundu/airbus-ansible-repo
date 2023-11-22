@@ -99,4 +99,5 @@
               debug:
                 msg: 
                  - "APF: Poller Is Failed"
-                 - "{{ ansible_failed_result }}"
+                 - "OUTPUT: Failed: {{ ansible_failed_result }}"
+              failed_when: True
