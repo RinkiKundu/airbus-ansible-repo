@@ -83,8 +83,7 @@
 
             - name: Display Log If No SCTASK Found
               debug:
-                msg: 
-                 - "APS-PNM: Pre-requisite Not Found"
+                msg: "APS-PNM: Pre-requisite Not Found"
               when: final_task_data is not defined
 
 
