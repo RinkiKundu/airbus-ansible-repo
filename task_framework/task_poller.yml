@@ -93,7 +93,7 @@
             - name: Log Output For Failure
               debug:
                 msg: "Log : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
-              failed_when: True
+              #failed_when: True
 
             - name: Display Failure Output
               debug:
