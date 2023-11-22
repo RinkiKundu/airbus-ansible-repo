@@ -1,77 +1,90 @@
 ---
-- name: Get details of open sc_task records from ServiceNow
-  hosts: localhost
-  gather_facts: false
+    - name: Fetch Incident and Update Incident fields data from ServiceNow
+      hosts: localhost
+      gather_facts: true
+    
+      vars:
+        servicenow_instance: "{{ instance_url }}"
+        state: "%5Estate%3D1"
+        mysql_query: "SELECT alert_name FROM incidentdata.config_table;"
+        pat_token: "{{ pat_token }}"
+        encoded_search_queries: ""
+    
+      tasks:
+        - block:
+            - name: Print PAT token 
+              debug:
+                var: pat_token
+    
+            # - name: Call the MySQL Query Playbook
+            #   include_tasks: mysql_query_playbook.yml
+            #   vars:
+            #     query: "{{ mysql_query }}"
+            #   register: alert_names
+    
+            - name: Fetch open SCTASK 
+              uri:
+                url: "{{ servicenow_instance }}/api/now/table/sc_task?sysparm_query=state%3D1%5EnumberSTARTSWITHSCTASK"
+                method: GET
+                headers:
+                  Accept: "application/json"
+                  #Authorization: "Basic {{ encoded_credentials | string }}"
+                  Authorization: "Bearer {{ pat_token }}"
+                return_content: yes
+                force_basic_auth: yes
+              register: task_data
 
-  tasks:
-    - block:
-        - name: Make API call to ServiceNow
-          uri:
-            url: "https://dev213985.service-now.com/api/now/table/sc_task?sysparm_query=state%3D1%5EnumberSTARTSWITHSCTASK"
-            method: GET
-            user: "admin"
-            password: "wyJRqr!3@AZ3"
-            return_content: yes
-            status_code: 200
-            headers:
-              Accept: "application/json"
-            body_format: json
-            # body:
-            #   sysparm_query: "state=1^numberSTARTSWITHSCTASK"
-            #   sysparm_fields: "field1,field2,field3"  # Specify sc_task fields you want
-          register: task_data
+            - name: Parse JSON response
+              set_fact:
+                sc_tasks: "{{ task_data.json.result }}"
 
-        - name: Parse JSON response
-          set_fact:
-            sc_tasks: "{{ task_data.json.result }}"
+            - name: Extract task data
+              set_fact:
+                extracted_tasks: "{{ task_data.json.result }}"
 
-        - name: Extract task data
-          set_fact:
-            extracted_tasks: "{{ task_data.json.result }}"
+            - name: Display Extract task data
+              debug:
+                var: extracted_tasks
 
-        - name: Display Extract task data
-          debug:
-            var: extracted_tasks
+            - name: Initialize a list to store incident numbers
+              set_fact:
+                task_numbers: []
+                short_Descriptions: []
+                ci_name: []
+                description: []
+                sys_id: []
 
-        - name: Initialize a list to store incident numbers
-          set_fact:
-            task_numbers: []
-            short_Descriptions: []
-            ci_name: []
-            description: []
-            sys_id: []
+            - name: extract specific field
+              set_fact:
+                task_numbers: "{{ task_numbers + [item.number] }}"
+                short_Descriptions: "{{ short_Descriptions + [item.short_description] }}"
+                description: "{{ description + [item.description] }}"
+                ci_name: "{{ ci_name + [item.cmdb_ci] }}"
+                sys_id: "{{ sys_id + [item.sys_id] }}"
+              loop: "{{ extracted_tasks }}"
+              when: item.number is defined and item.short_description is defined and item.description is defined and item.cmdb_ci is defined
 
-        - name: extract specific field
-          set_fact:
-            task_numbers: "{{ task_numbers + [item.number] }}"
-            short_Descriptions: "{{ short_Descriptions + [item.short_description] }}"
-            description: "{{ description + [item.description] }}"
-            ci_name: "{{ ci_name + [item.cmdb_ci] }}"
-            sys_id: "{{ sys_id + [item.sys_id] }}"
-          loop: "{{ extracted_tasks }}"
-          when: item.number is defined and item.short_description is defined and item.description is defined and item.cmdb_ci is defined
+            - name: print
+              debug:
+                var: short_Descriptions
 
-        - name: print
-          debug:
-            var: short_Descriptions
+            - name: Extract incident numbers and short descriptions
+              set_fact:
+                final_task_data: "{{ final_task_data | default([]) + [{'task-number': item.number, 'ci_name': item.cmdb_ci, 'short_description': item.short_description, 'description': item.description, 'sys_id': item.sys_id}] }}"
+              loop: "{{ extracted_tasks }}"
+              when: item | length > 0 
 
-        - name: Extract incident numbers and short descriptions
-          set_fact:
-            final_task_data: "{{ final_task_data | default([]) + [{'task-number': item.number, 'ci_name': item.cmdb_ci, 'short_description': item.short_description, 'description': item.description, 'sys_id': item.sys_id}] }}"
-          loop: "{{ extracted_tasks }}"
-          when: item | length > 0 
+            - name: Display final task data
+              debug:
+                var: final_task_data
 
-        - name: Display final task data
-          debug:
-            var: final_task_data
-
-        # - name: call validator template in loop
-        #   include_tasks: triggering-template-validator.yml
-        #   vars:
-        #     incident_data_validator: "{{ item }}"
-        #   loop: "{{ final_task_data }}"
-        #   loop_control:
-        #     loop_var: item 
+            # - name: call validator template in loop
+            #   include_tasks: triggering-template-validator.yml
+            #   vars:
+            #     incident_data_validator: "{{ item }}"
+            #   loop: "{{ final_task_data }}"
+            #   loop_control:
+            #     loop_var: item 
       rescue:
         - name: Log Output For Failure
           debug:
