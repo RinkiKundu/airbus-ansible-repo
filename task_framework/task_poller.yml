@@ -85,8 +85,8 @@
             #   loop: "{{ final_task_data }}"
             #   loop_control:
             #     loop_var: item 
-      rescue:
-        - name: Log Output For Failure
-          debug:
-            msg: "Log : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
-          failed_when: True
+          rescue:
+            - name: Log Output For Failure
+              debug:
+                msg: "Log : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+              failed_when: True
