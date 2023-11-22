@@ -81,10 +81,10 @@
                  - "{{ final_task_data }}"
               when: final_task_data is defined
 
-            - name: Display Log If No SCTASK Found
-              debug:
-                msg: "APS-PNM: Pre-requisite Not Found"
-              when: final_task_data is not defined
+            # - name: Display Log If No SCTASK Found
+            #   debug:
+            #     msg: "APS-PNM: Pre-requisite Not Found"
+            #   when: final_task_data is not defined
 
 
             # - name: call validator template in loop
