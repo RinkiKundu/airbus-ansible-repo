@@ -78,7 +78,7 @@
               debug:
                 msg: 
                  - "APS: Poller Is Successfull"
-                 - "final_task_data"
+                 - "{{ final_task_data }}"
               when: final_task_data is defined
 
 
