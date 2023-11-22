@@ -34,9 +34,9 @@
                 force_basic_auth: yes
               register: task_data
 
-            - name: Parse JSON response
-              set_fact:
-                sc_tasks: "{{ task_data.json.result }}"
+            # - name: Parse JSON response
+            #   set_fact:
+            #     sc_tasks: "{{ task_data.json.result }}"
 
             - name: Extract task data
               set_fact:
@@ -76,7 +76,11 @@
 
             - name: Display final task data
               debug:
-                var: final_task_data
+                msg: 
+                 - "APS: Poller Is Successfull"
+                 - "final_task_data"
+              when: final_task_data is defined
+
 
             # - name: call validator template in loop
             #   include_tasks: triggering-template-validator.yml
@@ -90,3 +94,9 @@
               debug:
                 msg: "Log : FAILED : Task {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
               failed_when: True
+
+            - name: Display Failure Output
+              debug:
+                msg: 
+                 - "APF: Poller Is Failed"
+                 - "{{ ansible_failed_result }}"
