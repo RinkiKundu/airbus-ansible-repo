@@ -41,12 +41,10 @@
             - name: Extract task data
               set_fact:
                 extracted_tasks: "{{ task_data.json.result }}"
-              when: task_data is defined
 
             - name: Display Extract task data
               debug:
                 var: extracted_tasks
-              when: extracted_tasks is defined
 
             - name: Initialize a list to store incident numbers
               set_fact:
@@ -55,7 +53,6 @@
                 ci_name: []
                 description: []
                 sys_id: []
-              when: extracted_tasks is defined
 
             - name: extract specific field
               set_fact:
