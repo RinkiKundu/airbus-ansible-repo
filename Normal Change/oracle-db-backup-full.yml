@@ -1,0 +1,83 @@
+---
+- name: Check if host exists in tower inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED :  this host {{ HOSTS }} does not exist in the inventory 2L22"
+        failed_when: True
+
+#---------------------------------------------------------------------------------------------
+- name: Playbook use case ORACLE DB Backup FULL on {{HOSTS}}
+  gather_facts: true
+  hosts: "{{HOSTS}}"
+  become: true
+  vars:
+   HOSTS:
+   ORACLE_SID:
+
+  tasks:
+    - block:
+
+      - name: Check that ORACLE_SID is provided and must be string
+        assert:
+          that:
+            - ORACLE_SID | mandatory
+            - ORACLE_SID is defined
+            - ORACLE_SID is string
+          msg: "Parameter ORACLE_SID is not set correctly"
+
+      - name: Check if path /home/oracle/tools/bin/ostd_expdp exist on {{HOSTS}}
+        stat:
+          path: /home/oracle/tools/bin/ostd_expdp
+        register: ostd_expdp
+
+      - name: OSTD_EXPDP is /home/oracle/tools/bin/ostd_expdp
+        set_fact: OSTD_EXPDP=/home/oracle/tools/bin/ostd_expdp
+        when: ostd_expdp.stat.exists == True
+
+      - name: Check if path /local/home/oracle/tools/bin/ostd_expdp exist on {{HOSTS}}
+        stat:
+          path: /local/home/oracle/tools/bin/ostd_expdp
+        register: local_ostd_expdp
+        when: ostd_expdp.stat.exists == false
+
+      - name: OSTD_EXPDP is /local/home/oracle/tools/bin/ostd_expdp
+        set_fact: OSTD_EXPDP=/local/home/oracle/tools/bin/ostd_expdp
+        when: ostd_expdp.stat.exists == false and local_ostd_expdp.stat.exists == True
+
+      - name: Fail if /home/oracle/tools/bin/ostd_expdp or /local/home/oracle/tools/bin/ostd_expdp does not exist
+        fail:
+          msg: "/home/oracle/tools/bin/ostd_expdp or /local/home/oracle/tools/bin/ostd_expdp does not exist"
+        when: ostd_expdp.stat.exists == false and local_ostd_expdp.stat.exists == false   
+
+      - name: "Execute ostd_expdp -s {{ORACLE_SID}} -u FULL  (on {{HOSTS}})"
+        become_user: oracle
+        become: true
+        shell: ". $HOME/.profile && {{OSTD_EXPDP}} -s {{ORACLE_SID}} -u FULL"
+        args:
+            executable: /bin/bash
+
+      - name: Log output for SYNTBOT OK
+        debug:
+          msg:
+           - "SYNTBOT_OUTPUT: SUCCESSFUL: ORACLE DB Backup FULL ({{OSTD_EXPDP}} -s {{ORACLE_SID}} -u FULL) on {{ansible_host}}"
+
+      rescue:
+
+      - name: Log output for SYNTBOT when failed
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ansible_failed_task.name}} failed ({{ansible_failed_result.msg}})"
+        failed_when: True
+#-------------------------------------------------------------------------------------------
