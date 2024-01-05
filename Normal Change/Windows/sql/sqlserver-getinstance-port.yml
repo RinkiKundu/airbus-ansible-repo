@@ -1,0 +1,34 @@
+---
+- name: Playbook Get SQLServer Instance Port (SQLserver fr0-vsiaas-4725)
+  gather_facts: false
+  hosts: "fr0-vsiaas-4725.eu.airbus.corp"
+  vars:
+    THISHOST: fr0-vsiaas-4725.eu.airbus.corp
+    HOSTS: 
+    SQLINSTANCE:
+
+  tasks:
+    - block:
+      - name: Copy ./files/sqlserver-getinstance-port.ps1 to {{ THISHOST }}
+        win_copy:
+          src: ./files/sqlserver-getinstance-port.ps1
+          dest: C:/Temp/sqlserver-getinstance-port.ps1
+        register: result_copy
+
+      - name: Execute Powershell C:/Temp/sqlserver-getinstance-port.ps1 "{{ HOSTS }}" "{{ SQLINSTANCE }}"
+        win_command: powershell.exe -ExecutionPolicy ByPass -File C:/Temp/sqlserver-getinstance-port.ps1 "{{ HOSTS }}" "{{ SQLINSTANCE }}"
+        register: result
+
+      - name: Log output for SYNTBOT when successfull
+        debug:
+          msg:
+           - "SYNTBOT_OUTPUT: SUCCESSFUL - on {{ THISHOST }}"
+           - "SYNTBOT_PARAM: {{ result.stdout|trim }}"
+
+      rescue:
+      - name: Log output for SYNTBOT FAILED
+        debug:
+          msg: 
+           - "SYNTBOT_OUTPUT:  FAILED : Task {{ ansible_failed_task.name}} failed on {{ THISHOST }} : {{ ansible_failed_result.msg }}"
+           - "SYNTBOT_DISPLAY: {{ result.stdout|trim }}"
+        failed_when: true 
