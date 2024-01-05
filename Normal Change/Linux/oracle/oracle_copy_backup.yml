@@ -1,0 +1,203 @@
+---
+- name: Playbook check if host exists in inventory
+  gather_facts: false
+  hosts: localhost
+
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: This target host {{ HOSTS }} does not exist in the Ansible Tower Inventory 2L22"
+        failed_when: True
+
+- name: Playbook check if host is Linux
+  gather_facts: false
+  hosts: 
+    - "{{ HOSTS }}"
+    - "{{ SRVDEST }}"
+  vars:
+    HOSTS:
+
+  tasks:
+    - block:
+      - name: "Fail if Variable ansible_connection is winrm"
+        assert:
+          that:
+            - ansible_connection != "winrm"
+          msg: "Playbook is for Linux not Windows"
+
+      rescue:
+      - name: Invalid OS for this playbook
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: {{ HOSTS }} is a Windows cannot run this playbook"
+        failed_when: True
+
+- name: Playbook Linux copy oracle backup
+  hosts: "{{ HOSTS }}"
+  gather_facts: true
+  become: true
+  vars:
+    HOSTS: ''
+    INSTANCE: ''
+    INSTANCEDEST: ''
+    SRVDEST: ''
+    DIR: "/u07/flash_recovery_area/{{ INSTANCE }}_{{inventory_hostname_short | upper | replace ('-','_')}}/export"
+    DIRDEST: "/u07/flash_recovery_area/{{ INSTANCEDEST }}_{{SRVDEST.split('.')[0] | upper | replace ('-','_')}}/export"
+    BINSSH: "{{ 'sshpass_rh6' if ansible_distribution_version < '7' else 'sshpass_rh7' }}"
+    REMOTE_USR: '{{ lookup("env", "ANSIBLE_NET_USERNAME") if ( SRVDEST is search ("eu-v.airbus-v")) else lookup("env", "OVIRT_USERNAME")}}'
+    REMOTE_PWD: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") if ( SRVDEST is search ("eu-v.airbus-v")) else lookup("env", "OVIRT_PASSWORD")}}'
+    CHANGE_NB: ''
+
+  tasks:
+    - block:
+      - name: "checking input parameters are not empty"
+        assert:
+          that: ( item is defined ) and ( item | string | length > 0 )
+          fail_msg: "At least a parameter is empty"
+        with_items:
+          - "{{HOSTS}}"
+          - "{{SRVDEST}}"
+          - "{{INSTANCE}}"
+          - "{{INSTANCEDEST}}"
+          - "{{CHANGE_NB}}"
+
+      - name: "Find last oracle backup for {{ INSTANCE }}"
+        shell: "ls -1tr {{DIR}}/DataPump_{{ INSTANCE }}_FULL*ALL.dmp | tail -1"
+        register: file
+        changed_when: false
+        failed_when: file.stdout | length == 0
+
+      - name: "Get file size"
+        stat:
+          path: "{{ file.stdout }}"
+          get_checksum: false
+        register: dump
+
+      - name: "Create directory on destination" 
+        file:
+          path: "{{ DIRDEST }}"
+          state: directory
+          owner: oracle
+          mode: 0777
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_ssh_user: "{{REMOTE_USR}}"
+          ansible_ssh_pass: "{{REMOTE_PWD}}"
+          ansible_become: yes
+          ansible_become_method: sudo
+          ansible_become_user: root
+          ansible_become_password: "{{REMOTE_PWD}}"
+
+      - name: "Get space availlable on destination" 
+#        shell: df  --output=avail "{{ DIRDEST }}"  | grep -v Avail
+        shell: df -P "{{ DIRDEST }}" | grep -v Avail | awk '{print $4}'
+        register: df_size
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_ssh_user: "{{REMOTE_USR}}"
+          ansible_ssh_pass: "{{REMOTE_PWD}}"
+          ansible_become: yes
+          ansible_become_method: sudo
+          ansible_become_user: root
+          ansible_become_password: "{{REMOTE_PWD}}"
+        changed_when: false
+
+      - name: "Verify if enough space to copy"
+        assert:
+          that: dump.stat.size/1024|round < df_size.stdout|int
+          fail_msg: "file {{ file.stdout }} is too big ({{dump.stat.size/1024|round}}) to be copied to {{DIR}} ({{df_size.stdout|int}})"
+      
+      - name: "Copy sshpass to HOSTS"
+        copy:
+          src: "files/{{ BINSSH }}"
+          dest: "/tmp/"
+          owner: root
+          mode: 0540
+
+      - name: "remove timestamp from dump file and replace it with change number"
+        set_fact:
+          FILE: "{{ file.stdout | basename | regex_replace ('_FULL_.*','_FULL_')}}{{CHANGE_NB}}.ALL.dmp"
+
+      - name: "Remove destination file if already exists" 
+        file:
+          path: "{{DIRDEST}}/{{FILE}}"
+          state: absent
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_ssh_user: "{{REMOTE_USR}}"
+          ansible_ssh_pass: "{{REMOTE_PWD}}"
+          ansible_become: yes
+          ansible_become_method: sudo
+          ansible_become_user: root
+          ansible_become_password: "{{REMOTE_PWD}}"
+
+      - name: "Add Ansible user to oinstall group" 
+        user:
+          name: "{{REMOTE_USR}}"
+          groups: oinstall
+          append: yes
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_ssh_user: "{{REMOTE_USR}}"
+          ansible_ssh_pass: "{{REMOTE_PWD}}"
+          ansible_become: yes
+          ansible_become_method: sudo
+          ansible_become_user: root
+          ansible_become_password: "{{REMOTE_PWD}}"
+
+      - name: "Copy the backup with scp" 
+        shell: "/tmp/{{ BINSSH }} -v -e scp -o StrictHostKeyChecking=no {{file.stdout}} {{REMOTE_USR}}@{{SRVDEST}}:{{DIRDEST}}/{{FILE}}"
+        environment: 
+          SSHPASS: "{{ REMOTE_PWD }}"
+        when: SRVDEST != HOSTS
+      
+      - name: "Copy the backup locally" 
+        copy:
+          src: "{{file.stdout}}"
+          remote_src: yes
+          mode: 666
+          dest: "{{DIRDEST}}/{{FILE}}"
+        when: SRVDEST == HOSTS
+
+      - name: "Modify the owner of the backup" 
+        file:
+          path: "{{DIRDEST}}"
+          owner: oracle
+          group: oinstall
+          recurse: yes
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_ssh_user: "{{REMOTE_USR}}"
+          ansible_ssh_pass: "{{REMOTE_PWD}}"
+          ansible_become: yes
+          ansible_become_method: sudo
+          ansible_become_user: root
+          ansible_become_password: "{{REMOTE_PWD}}"
+
+      - name: "Remove temporary files"
+        file:
+          path: "/tmp/{{ BINSSH }}"
+          state: absent
+
+      - name: Log output for SYNTBOT 
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: oracle backup {{ file.stdout }} copied on {{SRVDEST}}:{{DIRDEST}}/{{FILE}}"
+
+      rescue:
+      - name: "Remove temporary files"
+        file:
+          path: "/tmp/{{ BINSSH }}"
+          state: absent
+
+      - name: "FAILED log for Syntbot"
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed"
+        failed_when: True
