@@ -1,0 +1,117 @@
+---
+- name: Playbook check if host exists in inventory
+  gather_facts: false
+  hosts: localhost
+  vars:
+    HOSTS:
+    
+  tasks:
+    - block:
+      - name: "Fail if Extra Variable {{ HOSTS }} does not exist in Ansible Tower's inventory"
+        fail:
+          msg: "{{ item }} does not exist in Ansible Tower's inventory."
+        when: "item not in groups['all']"
+        with_items: "{{HOSTS}}"
+
+      rescue:
+      - name: Failure to get host in tower inventory
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: This target host {{ HOSTS }} does not exist in the Ansible Tower Inventory 2L22"
+        failed_when: True
+
+- name: Playbook copy SQLServer backup
+  gather_facts: false
+  hosts: "{{ HOSTS }}"
+  vars:
+    HOSTS:
+    SQLINSTANCE: ""
+    SQLINSTANCEDEST: ""
+    CHANGENUMBER: ""
+    SRVDEST: ""
+    BACKUPFOLDER: 'F:\Local\BackupSQL\{{SQLINSTANCE}}\Backup\{{CHANGENUMBER}}'
+    DIRDEST: '\Local\BackupSQL\{{SQLINSTANCEDEST if (SQLINSTANCEDEST != None and (SQLINSTANCEDEST | string | length > 0) and SQLINSTANCEDEST != "N/A") else SQLINSTANCE}}\Backup\{{CHANGENUMBER}}'
+    SQLDBNAME: ""
+    SQLDBNAMEDEST: ""
+    SLASH: '/'
+    BSLASH: '\'
+    REMOTE_USR: '{{ lookup("env", "ANSIBLE_NET_USERNAME") if ( SRVDEST is search ("eu-v.airbus-v")) else lookup("env", "OVIRT_USERNAME")}}'
+    REMOTE_PWD: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") if ( SRVDEST is search ("eu-v.airbus-v")) else lookup("env", "OVIRT_PASSWORD")}}'
+    LatestBackupFile: ""
+    DestBackupFile: ""
+    LatestCreationTime: 0
+
+  tasks:
+    - block:
+      - name: "Check mandatory input parameters"
+        assert:
+          that: ( item is defined ) and ( item | string | length > 0 ) and (item != None)
+          fail_msg: "At least a parameter is empty"
+        with_items:
+          - "{{HOSTS}}"
+          - "{{SRVDEST}}"
+          - "{{SQLINSTANCE}}"
+          - "{{CHANGENUMBER}}"
+          - "{{DIRDEST}}"
+
+      - name: "Check Source Backup Folder {{BACKUPFOLDER}}"
+        win_stat:
+          path: "{{ BACKUPFOLDER }}"
+        register: backup
+        failed_when: not backup.stat.exists
+
+      - name: "Get Destination F: Free Space"
+        win_shell: 'Get-PSDrive F | Select-Object Free | ConvertTo-Json'
+        register: Fsize
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_user : '{{ REMOTE_USR }}'
+          ansible_password: '{{ REMOTE_PWD }}'
+      
+      - name: extract free space
+        set_fact:
+          Fsize_json: "{{Fsize.stdout|from_json}}"
+
+      - name: "Destination space check"
+        assert:
+          that: backup.stat.size < Fsize_json.Free
+          fail_msg: "Backup {{ BACKUPFOLDER }} is too big ({{ (backup.stat.size/1048576)|int }}M) to be copied to F:{{DIRDEST}} ({{(Fsize_json.Free/1048576)|int}}M) on {{SRVDEST}}"
+          success_msg: 'Backup {{ BACKUPFOLDER }} ({{ (backup.stat.size/1048576)|int }}M) can be copied to F:{{DIRDEST}} ({{ (Fsize_json.Free/1048576)|int }}M) on {{SRVDEST}}'
+
+      - name: "Create Directory on destination server"
+        win_file:
+          path: "F:{{DIRDEST}}"
+          state: directory
+        delegate_to: "{{SRVDEST}}"
+        vars:
+          ansible_user : '{{ REMOTE_USR }}'
+          ansible_password: '{{ REMOTE_PWD }}'
+          
+      - name: Copy Backup File destination dbname if requested
+        win_command: "cmd.exe /c copy /Y {{BACKUPFOLDER}}\\{{SQLDBNAME}}.*.bak {{BACKUPFOLDER}}\\{{SQLDBNAMEDEST}}.*.bak"
+        when: ( (SQLDBNAME | length) > 0 ) and ( (SQLDBNAMEDEST | length) > 0 )
+        
+      - name: Remove Backup File after copy
+        win_command: "cmd.exe /c DEL {{BACKUPFOLDER}}\\{{SQLDBNAME}}.*.bak"
+        when: ( (SQLDBNAME | length) > 0 ) and ( (SQLDBNAMEDEST | length) > 0 )
+      
+      - name: "Copy Backup to Destination"
+        win_copy: 
+          src: "{{ BACKUPFOLDER }}\\"
+          remote_src: yes
+          dest: "\\\\{{SRVDEST}}\\F$\\{{ DIRDEST }}\\"
+        vars:
+          ansible_become: yes
+          ansible_become_method: runas
+          ansible_become_user: '{{ REMOTE_USR }}'
+          ansible_become_pass: '{{ REMOTE_PWD }}'
+          ansible_become_flags: logon_type=new_credentials logon_flags=netcredentials_only
+        
+      - name: Log output for SYNTBOT
+        debug:
+          msg:
+            - "SYNTBOT_OUTPUT: SUCCESSFUL: backup {{ BACKUPFOLDER }} has been copied from {{ HOSTS }} to {{ SRVDEST }} into F:{{DIRDEST}}"
+      rescue:
+      - name: "FAILED log for Syntbot"
+        debug:
+          msg: "SYNTBOT_OUTPUT: FAILED: Task {{ ansible_failed_task.name}} failed"
+        failed_when: True
