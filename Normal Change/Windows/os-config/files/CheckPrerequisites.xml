@@ -1,0 +1,27 @@
+<!-- 
+TemplateID: 2019-10-06
+-->
+
+<Root>
+	<!-- === region Preparation === -->
+	<PackageVariables>
+		<!-- Used for KeyPath and ATREF file. No Spaces -->
+		<SoftShortName>CheckPrerequisites</SoftShortName>
+		<!-- Will set as value for KeyPath!SoftLongName reg property -->
+		<SoftLongName>Check Prerequisites</SoftLongName>
+		<SoftVersion>1.0</SoftVersion>
+		<ATREF>
+			<W2008R2>NA</W2008R2>
+			<W2012>NA</W2012>
+			<W2012R2>NA</W2012R2>
+			<W2016>NA</W2016>
+			<W2019>NA</W2019>
+		</ATREF>
+	</PackageVariables>
+	
+	<!-- === region Finalization === -->
+	<ParentKeyPath>HKLM:\SOFTWARE\AIRBUS\Migration</ParentKeyPath>
+
+	<!-- === region AllActions === -->
+
+</Root>
