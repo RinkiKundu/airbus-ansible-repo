@@ -1,0 +1,107 @@
+#!/bin/ksh
+#*********************************************************************
+# systeme       : Kit Outils Oracle
+# fichier       : ostd_start_dg
+# date creation : 03/12/2018
+# auteur creat. : SPE
+# version       : 1.0
+# date version  : 03/12/2018
+# description   : Startup of instance (DATAGUARD and STANDALONE)
+#			PRIMARY -> status OPEN
+#			STANDBY -> status MOUNTED
+#
+# parameter     : ORACLE_SID
+#********************************************************************************
+[ "`uname -s`" = "Linux" ] && alias echo='\echo -e'
+
+#--------------------------------------------------------------------------------
+# Function : StartDB
+#--------------------------------------------------------------------------------
+StartDB()
+{
+if [ `ps -ef|grep -v grep |grep ora_dbw|grep "_$ORACLE_SID" | wc -l ` -gt 0 ]
+then
+sqlplus "/ as sysdba" <<EOF 2>&1 >>$LOGFILE
+select status from v\$instance;
+select database_role from v\$database;
+EOF
+else
+sqlplus "/ as sysdba" <<EOF 2>&1 >>$LOGFILE
+startup mount;
+select database_role from v\$database;
+EOF
+fi
+
+if [ `cat $LOGFILE|grep -i "OPEN"|wc -l` -gt 0 ]
+then
+   ora_info "${ORACLE_SID} : OK database opened (`date`)"
+# If the database is already mounted : check if it's primary or standby
+# If the database is primary we open the database esle we don't anything
+elif [ `cat $LOGFILE|grep -i "MOUNTED"|wc -l` -gt 0 ]
+then
+   if [ `cat $LOGFILE|grep -i "PRIMARY"|wc -l` -gt 0 ]
+   then
+	sqlplus "/ as sysdba" <<EOF 2>&1 >>$LOGFILE
+	alter database open;
+EOF
+   	ora_info "${ORACLE_SID} : OK database open (`date`)"
+	
+   else 
+        ora_info "${ORACLE_SID} : OK database mounted (`date`)"
+   fi
+fi
+
+get_error_log ORA
+
+}
+
+
+#-------------------------------------------------------------------------
+# Main Procedure
+#-------------------------------------------------------------------------
+
+#------------------------------------------
+# initialisation environnement & fonctions
+#------------------------------------------
+RAC=${EXPL:-/home/oracle/tools}
+if [ -d $RAC ]
+then
+   export RAC
+else
+   echo "#E# Environnment not set (Racine=$RAC)"
+   exit 1
+fi
+. $RAC/bin/ostd_include
+
+#------------------------------------------
+# Parameter initialisation 
+#------------------------------------------
+flg=1
+
+while getopts :s: LINE
+do
+        case $LINE in
+		s) ORACLE_SID=$OPTARG;flg=s;;
+                :) echo " The Option -$OPTARG need an argument ";exit 1;;
+		?) echo "Usage : $0  -s ORACLE_SID ";exit 1;;
+        esac
+done
+
+if [ "$flg" != "s" ]; then
+echo "Usage : $0 -s ORACLE_SID ";exit 1;
+fi
+
+#------------------------------------------
+# Check if the instance exist
+#------------------------------------------
+ora_inst_exist $ORACLE_SID
+#------------------------------------------
+# Set oracle environment
+#------------------------------------------
+ora_inst_setenv $ORACLE_SID
+
+gen_start_log
+
+StartDB
+db_conf
+gen_end_log
