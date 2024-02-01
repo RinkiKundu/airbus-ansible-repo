@@ -1,0 +1,172 @@
+#------------------------------------------------------------------------------------------------
+## task-w2k12-upgrade-pre-check
+#------------------------------------------------------------------------------------------------
+--- 
+    - block:
+
+      - name: Debug
+        debug:
+          msg: "Task Windows 2019 CheckPrerequisites for upgrade to windows 2019"
+
+      - name: Select FILER de-vfiler095.eu.airbus.corp if hostname ({{HOSTS}}) begin with de
+        set_fact:
+          FILER: 'de-vfiler095.eu.airbus.corp'
+        when: HOSTS is search ('^de')
+
+      - name: Select FILER uk-vfiler095.eu.airbus.corp if hostname ({{HOSTS}}) begin with uk
+        set_fact:
+          FILER: 'uk-vfiler095.eu.airbus.corp'
+        when: HOSTS is search ('^uk')
+
+      - name: Select FILER es-vfiler095.eu.airbus.corp if hostname ({{HOSTS}}) begin with es
+        set_fact:
+          FILER: 'es-vfiler095.eu.airbus.corp'
+        when: HOSTS is search ('^es')
+
+      - name: Select default FILER for all servers with hostname ({{HOSTS}}) not begin with (de,uk,es)
+        set_fact:
+          FILER: 'fr-vfiler095.eu.airbus.corp'
+        when: (not HOSTS is search ('^de')) and (not HOSTS is search ('^uk'))  and (not HOSTS is search ('^es'))
+
+      - name: Set FILER_PATH ({{FILER}}\OS_Install\MyWM\Automated In-Place Upgrade\W2016-W2019)
+        set_fact:
+          FILER_PATH: '\\{{FILER}}\OS_Install\MyWM\Automated In-Place Upgrade\W2016-W2019'
+
+      - name: Remove directory {{TEMP_PATH}}\__MigLocal , {{TEMP_PATH}}\_MigSRC if exists on {{ HOSTS }}
+        win_file:
+          path: "{{ item }}"
+          state: absent
+        with_items:
+          - "{{TEMP_PATH}}/__MigLocal"
+          - "{{TEMP_PATH}}/_MigSRC"
+
+      - name: pick up the lines we are interested in.
+        set_fact:
+          important_lines: "{{ important_lines|default([]) +  [item] }}"
+        when: item.split('|') 
+        with_items:
+          - "{{ code_var }}"
+
+      - name: Create directory {{TEMP_PATH}} if does not exists
+        win_file:
+          path: "{{TEMP_PATH}}"
+          state: directory
+
+      - name: Task - Copy 7z.dll and 7z.exe to {{TEMP_PATH}}
+        win_copy:
+          src: "{{item}}"
+          dest: "{{TEMP_PATH}}"
+        with_items:
+          - files/7z.dll
+          - files/7z.exe
+        register: download
+
+      #- name: Download 7z.dll and 7z.exe from  artifactory.fr.eu.airbus.corp
+        #win_get_url:
+          #url: https://artifactory.fr.eu.airbus.corp/1Y40/R-2L22_SyntBots_generic_L/windows/7zip/{{item}}
+          #headers:
+            #X-JFrog-Art-Api: AKCp5e3outMQBxeB6mg6E54ap2mnwnVSoKv4vGr7mjk1ZmazGBiY6N5gBhSyxZdsRv89rGYJ3
+          #dest: "{{TEMP_PATH}}"
+          #force: yes
+        #with_items:
+          #- 7z.dll
+          #- 7z.exe
+
+      - name: Unzip script CheckPrerequisites.* from {{FILER_PATH}}\{{ISO_FILE}}
+        win_command: '{{TEMP_PATH}}\7z.exe x -y -spf "{{FILER_PATH}}\{{ISO_FILE}}" CheckPrerequisites.* -r -o{{TEMP_PATH}}'
+        register: unzip
+        vars:
+          ansible_become: yes
+          ansible_become_method: runas
+          ansible_become_user: '{{ lookup("env", "ANSIBLE_NET_USERNAME") }}'
+          ansible_become_pass: '{{ lookup("env", "ANSIBLE_NET_PASSWORD") }}'
+          ansible_become_flags: logon_type=new_credentials logon_flags=netcredentials_only
+
+      - name: Execute script {{TEMP_PATH}}/_MigSRC/Scripts/CheckPrerequisites/CheckPrerequisites.cmd
+        win_command:  cmd /c "{{TEMP_PATH}}/_MigSRC/Scripts/CheckPrerequisites/CheckPrerequisites.cmd"
+        register: result
+          
+      - name: Create directory D:\Temp\Migration\ if does not exist
+        win_file:
+          path: '{{item}}'
+          state: directory
+        with_items:
+          - D:\Temp\Migration\
+
+      - name: Copy script w2k12-SaveIpconfigLocalAdmin.ps1
+        win_copy:
+          src: "{{item}}"
+          dest: D:\Temp\Migration\
+        with_items:
+          - files/w2k12-SaveIpconfigLocalAdmin.ps1
+
+      - name: Execute w2k12-SaveIpconfigLocalAdmin.ps1 on {{HOSTS}} pre-check task
+#        win_command:  powershell.exe -ExecutionPolicy ByPass -File "D:\Temp\Migration\w2016-SaveIpconfigLocalAdmin.ps1"
+        win_command:  powershell.exe -ExecutionPolicy ByPass -File "D:\Temp\Migration\w2k12-SaveIpconfigLocalAdmin.ps1"
+        ignore_errors: yes
+
+      - name: Log output for SYNTBOT when successful
+        debug:
+          msg:
+           - "SUCCESSFUL: Check Prerequisites for upgrade Windows 2016 to Windows 2019 on ({{HOSTS}})"
+
+#---------------------------------------------------------------------------------------------------------
+      rescue:
+      
+       - name: Log output when execute 7zip files failed
+         debug:
+           msg:
+            - "TASK FAILED: Execute 7zip.exe failed"
+         failed_when: True
+         when: result is not defined
+         
+       - name: endplay
+         meta: end_play
+         when: result is not defined
+         
+       - name: set fact
+         set_fact: 
+           ERROR_CODE: "{{ result.rc }}"
+
+       - name: find the line with the name we are looking for in 2nd column
+         set_fact:
+           target_line: "{{ item }}"
+         when: item|trim is search(ERROR_CODE)
+         with_items:
+           - "{{ important_lines }}"
+
+       - name: get the attributes from the target line
+         set_fact:
+           attribute: "{{ target_line.split('|')[2]|trim }}"
+
+       - name: "TotalSize for disk C or D "
+         set_fact:
+           TOTAL: "{{ item }}"
+         with_items:
+           - "{{ result.stdout_lines }}"
+         when: item|trim is search('TotalSize:') and (ERROR_CODE == '21030' or ERROR_CODE == '21050')
+
+       - name: "Freespace for disk C or D"
+         set_fact:
+           FREE: "{{ item }}"
+         with_items:
+           - "{{ result.stdout_lines }}"
+         when: item|trim is search('FreeSpace:') and (ERROR_CODE == '21030' or ERROR_CODE == '21050')
+
+       - name: Log output for SYNTBOT when failed
+         debug:
+           msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ansible_failed_task.name}} failed on {{HOSTS}} : {{ ansible_failed_result.msg }}"
+            - "SYNTBOT_DISPLAY: error_code:{{ ERROR_CODE }} , {{ attribute }}  ({{TOTAL}} / {{FREE}})"
+         failed_when: True
+         when: ERROR_CODE == '21030' or ERROR_CODE == '21050'
+
+       - name: Log output for SYNTBOT when failed other errors
+         debug:
+           msg:
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ansible_failed_task.name}} failed on {{HOSTS}} : {{ ansible_failed_result.msg }}"
+            - "SYNTBOT_DISPLAY: error_code:{{ ERROR_CODE }} , {{ attribute }}"
+         failed_when: True
+         when: ERROR_CODE != '21030' or ERROR_CODE != '21050'
+
+#---------------------------------------------------------------------------------------------------------
