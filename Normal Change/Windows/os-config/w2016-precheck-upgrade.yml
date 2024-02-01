@@ -9,103 +9,127 @@
           msg: "{{ item }} does not exist in Ansible Tower's inventory."
         when: "item not in groups['all']" 
         with_items: "{{HOSTS|lower}}"
+
       rescue:
       - name: Failure to get host in tower inventory
         debug:
-          msg: "SYNTBOT_OUTPUT : FAILED : Failed to find host ({{HOSTS|lower}}) in Ansible tower inventory 2L22"
+          msg: 
+            - "SYNTBOT_OUTPUT: FAILED: This server {{HOSTS|lower}} does not exist in th inventory 2L22"
         failed_when: True
-#---------------------------------------------------------------------------------
-- name: Playbook Windows W2K16 check post upgrade
+#------------------------------------------------------------------------------------------------
+#Check Port 5985
+- name: Playbook Windows Pre-Check for upgrade Windows 2016 to Windows 2019
   hosts: "{{ HOSTS|lower }}"
   gather_facts: false
   vars:
     - HOSTS:
+    - ISO_FILE: 
 
   tasks:
     - block:
-
-      - name: Force hostname to lower case
-        set_fact:
-          HOSTS: "{{HOSTS|lower}}"
-
-      - name: Check if host {{HOSTS}} winrm available
+      - name: Check if port 5985 is available
         wait_for:
-          host: '{{HOSTS}}'
+          host: "{{ inventory_hostname }}"
           port: 5985
           connect_timeout: 2
           timeout: 2
         delegate_to: localhost
 
-      - name: Gathering facts on {{HOSTS}}
-        delegate_to: "{{HOSTS}}"
-        run_once: true
+      - name: Gathering facts
         setup:
 
-      - name: Display os type and os level
+      - set_fact:
+          OS: "{{ ansible_distribution }}"
+          TYPE: "{{ ansible_distribution_version }}"
+
+      - name: Debugs
         debug:
-          msg: 'OS type: {{ansible_distribution}}  Level: {{ansible_distribution_major_version}}'
-
-      - name: Check OS version Windows 2016
-        assert:
-          that:
-            - "{{'2016' in ansible_distribution}}"
-
-      - name: Delete file C:\~LOGS\MyWM\CompareServices\NotStartedAutoServices_Comma.csv if exists
-        win_file:
-          path: "{{ item }}"
-          state:  absent
-        with_items:
-          - C:\~LOGS\MyWM\CompareServices\NotStartedAutoServices_Comma.csv
-
-      - name: "Check if script D:/_MigSRC/Scripts/CompareServices/CompareServices.cmd exists"
-        win_stat:
-          path: D:\_MigSRC\Scripts\CompareServices\CompareServices.cmd
-        register: script_compare
-
-      - name: Execute CompareServices.cmd on {{HOSTS}}
-        win_command: D:\_MigSRC\Scripts\CompareServices\CompareServices.cmd 
-        register: result_compare
-        when: script_compare.stat.exists == true
-        ignore_errors: yes
-
-      - name: Check if file NotStartedAutoServices_Comma.csv is created
-        win_stat:
-          path: C:\~LOGS\MyWM\CompareServices\NotStartedAutoServices_Comma.csv
-        register: file
-
-      - name: Copy script list-services-auto-not-started.ps1
-        win_copy: 
-          src: "{{item}}"
-          dest: D:\Temp\Migration\
-        with_items:
-          - files/list-services-auto-not-started.ps1
-        when: file.stat.exists == True
-
-      - name: "Display content of the file C:/~LOGS/MyWM/CompareServices/NotStartedAutoServices_Comma.csv"
-        win_shell: 'D:/Temp/Migration/list-services-auto-not-started.ps1'
-        register: file_content
-        when: file.stat.exists == True
-
-      - name: Log output for SYNTBOT when OK with content of file
-        debug:
-          msg:
-            - "SYNTBOT_OUTPUT : SUCCESSFUL upgrade to Windows 2016 on {{HOSTS}}"
-            - "SYNTBOT_DISPLAY : Last reboot {{ansible_lastboot}} {{ansible_distribution}} Level: {{ansible_distribution_major_version}}"
-            - "{{file_content.stdout_lines|to_nice_yaml}}"
-        when: file.stat.exists == True
-
-      - name: Log output for SYNTBOT when OK compare are identical
-        debug:
-          msg:
-            - "SYNTBOT_OUTPUT : SUCCESSFUL upgrade to Windows 2016 on {{HOSTS}}"
-            - "SYNTBOT_DISPLAY : Last reboot {{ansible_lastboot}} {{ansible_distribution}} Level: {{ansible_distribution_major_version}}"
-            - "All running services are identicals (before and after migration)"
-        when: file.stat.exists == False
+          msg: 
+            - "{{OS}} {{TYPE}}"
 
       rescue:
       - name: Log output for SYNTBOT when failed
         debug:
           msg:
-            - "SYNTBOT_OUTPUT : FAILED : Task {{ansible_failed_task.name}} failed {{ansible_failed_result.msg }} ({{ansible_host}} is running {{ansible_distribution}})"
+            - "SYNTBOT_OUTPUT: FAILED: Task {{ansible_failed_task.name}} failed {{ansible_failed_result.msg}} on {{ansible_host}}"
+            - "SYNTBOT_DISPLAY: FAILED: Task {{ansible_failed_task.name}} failed {{ansible_failed_result.msg}} on {{ansible_host}}"
         failed_when: True
-#----------------------------------------------------------------------------------------
+#------------------------------------------------------------------------------------------------
+- name: Playbook CheckPrerequisite for upgrade W2K16 to W2K19
+  gather_facts: false
+  hosts: "{{ HOSTS|lower }}"
+  vars:
+    HOSTS:
+    FILER: ''
+    code_var:
+      - "|20100| Precheck FAILED : You must use ADMINISTRATOR Account"
+      - "|20200| Precheck FAILED : The CheckPrerequisites.xml file is missing"
+      - "|20210| Precheck FAILED : The CheckPrerequisites.xml file can't be read"
+      - "|20220| Precheck FAILED : Unsupported OS : OS version must be Windows 2012 ({{HOSTS}} is running {{OS}} {{TYPE}})"
+      - "|20666| Precheck FAILED : Unknown error detected. Check the transcript log file locally on the host for more information"
+      - "|21010| Precheck FAILED : Cluster service (ClusSvc) found. The target host is a member of an MSCS cluster"
+      - "|21020| Precheck FAILED : At least one SQL instance installed on the target host is too old, an SQL upgrade is required before the Windows upgrade"
+      - "|21021| Precheck FAILED : SQL DBs on W2K19 servers are not supported so it is not possible to perform the in-place-migration"
+      - "|21030| Precheck FAILED : Not enough free space on the system (C:) disk. At least '40' GB of free space is required for upgrade"
+      - "|21040| Precheck FAILED : Disk 'D:' does not exist or it is not a type '3' (Local hard disk)"
+      - "|21050| Precheck FAILED : Not enough free space on the D: disk. At least '30' GB of free space is required for upgrade"
+      - "|22000| Precheck FAILED : Free space on disk C:\ and/or disk D:\ does not meet the prerequisites for migration, at least 20 GB of free space is required for migration"
+      - "|1010011010| Precheck FAILED : Another instance of this migration script is running"
+      - "|-2146234327| Precheck FAILED : Unknown error script CheckPrerequisites.cmd Failed" 
+
+  tasks:
+    - block:
+
+      - name: Check input variable ISO_FILE
+        assert:
+          that:
+            - ISO_FILE | mandatory
+            - ISO_FILE is defined
+
+      - name: Force Hostname to Lower case
+        set_fact:
+          HOSTS: "{{HOSTS|lower}}"
+
+      - name: Set Temporary Path D:/Temp/Upgrade_W2016_W2019 on {{HOSTS}}
+        set_fact:
+          TEMP_PATH: 'D:/Temp/Upgrade_W2016_W2019/'
+
+      - name: Create directory {{TEMP_PATH}} if doesn't exist
+        win_file:
+          path: '{{item}}'
+          state: directory
+        with_items:
+          - "{{TEMP_PATH}}"
+
+      - name: Execute task wk12 precheck
+        include_tasks: tasks/task-w2016-upgrade-precheck.yml
+        #register: precheck
+          
+      - name: Log output for SYNTBOT when successful
+        debug:
+          msg:
+           - "SYNTBOT_OUTPUT: SUCCESSFUL: Check Prerequisites for upgrade W2K16 to W2K19 is SUCCESS and {{ansible_host}} is running {{OS}} {{TYPE}}"
+
+#---------------------------------------------------------------------------------------------------------
+      rescue:
+
+       - name: Exit because the pre-check is failed
+         meta: end_play 
+         when: (ERROR_CODE is defined) and (ERROR_CODE|length > 0)
+
+       - name: Log output for SYNTBOT when failed
+         debug:
+           msg:
+             - "SYNTBOT_OUTPUT: FAILED: Task {{ansible_failed_task.name}} failed {{ansible_failed_result.msg}} on {{ansible_host}}"
+         failed_when: True
+
+      always:
+       - name: Delete 7z.dll and 7z.exe
+         win_file:
+           path: "{{ item }}"
+           state: absent
+         with_items:
+           - "{{TEMP_PATH}}/7z.dll"
+           - "{{TEMP_PATH}}/7z.exe"
+
+#---------------------------------------------------------------------------------------------------------
