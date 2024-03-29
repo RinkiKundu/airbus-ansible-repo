@@ -28,7 +28,7 @@
 
         - name: Print the powershell script Output
           debug:
-            msg: "OUTPUT: SCRIPT RESULT : {{ result }}"
+            msg: "OUTPUT: SCRIPT RESULT : {{ result.stdout_lines }}"
           
         - name: Script Execution sucessfull.
           debug:
