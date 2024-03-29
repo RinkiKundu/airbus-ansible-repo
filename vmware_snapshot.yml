@@ -38,4 +38,4 @@
       rescue:
         - name: Log Output For Failure
           debug:
-            msg: "Failed: {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result }}"
+            msg: "Failed: {{ ansible_failed_task.name }} Failed and the ERROR: {{ ansible_failed_result.stdout_lines }}"
