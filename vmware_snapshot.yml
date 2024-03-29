@@ -25,6 +25,7 @@
           win_command: powershell.exe -ExecutionPolicy ByPass -File "{{ script_path }}"  -username "{{ username }}" -password "{{ password }}" -usecaseName "{{ usecaseName }}"
           register: result
           changed_when: false
+          no_log: true
 
         - name: Print the powershell script Output
           debug:
